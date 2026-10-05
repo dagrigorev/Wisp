@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Separate symptoms from the actual Wsh defect.
+Separate symptoms from the actual Wisp defect.
 
 ## When to use
 

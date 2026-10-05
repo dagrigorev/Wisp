@@ -1,9 +1,9 @@
 #pragma once
-#ifndef WSH_SESSION_H
-#define WSH_SESSION_H
+#ifndef WISP_SESSION_H
+#define WISP_SESSION_H
 
 #include <windows.h>
-#include "wsh_bool.h"
+#include "wisp_bool.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -11,12 +11,12 @@
 extern "C" {
 #endif
 
-#define WSH_SESSION_MAGIC  0x53485357
-#define WSH_SESSION_VERSION 2
+#define WISP_SESSION_MAGIC  0x53485357
+#define WISP_SESSION_VERSION 2
 
-#define WSH_SESSION_MAX_PANES  4
-#define WSH_SESSION_MAX_TABS   8
-#define WSH_SESSION_MAX_SCROLLBACK 500
+#define WISP_SESSION_MAX_PANES  4
+#define WISP_SESSION_MAX_TABS   8
+#define WISP_SESSION_MAX_SCROLLBACK 500
 
 typedef struct {
     bool enabled;

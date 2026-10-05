@@ -16,7 +16,7 @@ Next step:
 
 ## Issues
 
-### WSH-KI-001 — Legacy duplicate source files
+### WISP-KI-001 — Legacy duplicate source files
 
 Status:
 Open architectural cleanup.
@@ -36,7 +36,7 @@ They are legacy copies not linked by the current executable target.
 Next step:
 Only remove or move them in a dedicated refactoring task with a full build/test verification pass.
 
-### WSH-KI-002 — GUI and interactive behavior need manual QA
+### WISP-KI-002 — GUI and interactive behavior need manual QA
 
 Status:
 Ongoing.
@@ -48,7 +48,7 @@ Affected area:
 `src/window.cpp`, `src/repl.c`, `src/terminal`, `src/platform`.
 
 Reproduction:
-Build Wsh, run `Wsh.exe`, and execute manual QA from [Manual QA](../skills/testing/manual-qa.md).
+Build Wisp, run `Wisp.exe`, and execute manual QA from [Manual QA](../skills/testing/manual-qa.md).
 
 Current hypothesis:
 CTest is necessary but not sufficient for interactive terminal regressions.
@@ -56,7 +56,7 @@ CTest is necessary but not sufficient for interactive terminal regressions.
 Next step:
 For every UI/input/pane/rendering fix, document manual QA steps and results in handoff.
 
-### WSH-KI-003 — Zsh compatibility is incomplete
+### WISP-KI-003 — Zsh compatibility is incomplete
 
 Status:
 Known product limitation.
@@ -71,12 +71,12 @@ Reproduction:
 Try non-trivial Zsh syntax or plugins.
 
 Current hypothesis:
-Wsh implements a growing shell/runtime but not full Zsh semantics.
+Wisp implements a growing shell/runtime but not full Zsh semantics.
 
 Next step:
 Implement compatibility incrementally with tests and avoid broad compatibility claims.
 
-### WSH-KI-004 — ConPTY shutdown and resize paths require care
+### WISP-KI-004 — ConPTY shutdown and resize paths require care
 
 Status:
 Needs ongoing verification.
@@ -96,7 +96,7 @@ Edge cases depend on real Windows pseudo-console behavior.
 Next step:
 Use [Trace Execution](../skills/debugging/trace-execution.md) and [Manual QA](../skills/testing/manual-qa.md) for related fixes.
 
-### WSH-KI-005 — INPUT_NEXT_TAB / INPUT_PREV_TAB unhandled in WM_KEYDOWN
+### WISP-KI-005 — INPUT_NEXT_TAB / INPUT_PREV_TAB unhandled in WM_KEYDOWN
 
 Status:
 Fixed.
@@ -108,7 +108,7 @@ Affected area:
 `src/main.cpp` — WndProc WM_KEYDOWN handler.
 
 Reproduction:
-Press Ctrl+Tab or Ctrl+Shift+Tab in Wsh with multiple tabs open. No tab switch occurs.
+Press Ctrl+Tab or Ctrl+Shift+Tab in Wisp with multiple tabs open. No tab switch occurs.
 
 Current hypothesis:
 The actions were defined in the input enum and returned by `input_translate()`, but the switch handler was never extended to cover them.

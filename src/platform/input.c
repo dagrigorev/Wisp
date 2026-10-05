@@ -1,7 +1,7 @@
 #include <windows.h>
 #include <string.h>
 #include <stdint.h>
-#include "wsh_bool.h"
+#include "wisp_bool.h"
 #include "input.h"
 #include "../core/str_util.h"
 

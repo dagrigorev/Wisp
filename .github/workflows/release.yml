@@ -48,7 +48,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          ./build-and-run-wsh.ps1 -Configuration Release -BuildDir build-release -NoRun -RunTests
+          ./build-and-run-wisp.ps1 -Configuration Release -BuildDir build-release -NoRun -RunTests
 
       - name: Package dist
         id: package
@@ -59,14 +59,14 @@ jobs:
           $tagName = "${{ github.ref_name }}"
           $safeTagName = $tagName -replace '[^A-Za-z0-9._-]', '-'
           $dist = Join-Path $PWD "build-release\dist"
-          if (-not (Test-Path -LiteralPath (Join-Path $dist "Wsh.exe"))) {
-            throw "Expected Wsh.exe in $dist."
+          if (-not (Test-Path -LiteralPath (Join-Path $dist "Wisp.exe"))) {
+            throw "Expected Wisp.exe in $dist."
           }
 
           $artifactDir = Join-Path $PWD "artifacts"
           New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
 
-          $zipName = "Wsh-$safeTagName-windows-x64.zip"
+          $zipName = "Wisp-$safeTagName-windows-x64.zip"
           $zipPath = Join-Path $artifactDir $zipName
           if (Test-Path -LiteralPath $zipPath) {
             Remove-Item -LiteralPath $zipPath -Force
@@ -95,7 +95,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: Wsh ${{ github.ref_name }}
+          name: Wisp ${{ github.ref_name }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |

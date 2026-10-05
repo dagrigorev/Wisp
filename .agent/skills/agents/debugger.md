@@ -2,7 +2,7 @@
 
 ## Mission
 
-Reproduce and isolate root cause before changing Wsh code.
+Reproduce and isolate root cause before changing Wisp code.
 
 ## Start here
 

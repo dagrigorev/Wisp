@@ -11,12 +11,12 @@
  *     no allocation policy (arena is separate).
  *   - Abstraction: callers use str_* functions, not raw Win32 Wide APIs.
  */
-#ifndef WSH_STR_UTIL_H
-#define WSH_STR_UTIL_H
+#ifndef WISP_STR_UTIL_H
+#define WISP_STR_UTIL_H
 
 #include <windows.h>
 #include <stddef.h>
-#include "wsh_bool.h"
+#include "wisp_bool.h"
 
 
 #ifdef __cplusplus
@@ -81,4 +81,4 @@ static inline void str_free(void *p) {
 }
 #endif
 
-#endif /* WSH_STR_UTIL_H */
+#endif /* WISP_STR_UTIL_H */

@@ -11,11 +11,11 @@
  *        Open/Closed — new allocation policies (e.g. aligned) extend via new
  *        functions; the struct is never modified.
  */
-#ifndef WSH_ARENA_H
-#define WSH_ARENA_H
+#ifndef WISP_ARENA_H
+#define WISP_ARENA_H
 
 #include <stddef.h>
-#include "wsh_bool.h"
+#include "wisp_bool.h"
 
 
 #ifdef __cplusplus
@@ -48,4 +48,4 @@ void   arena_destroy(Arena *a);
 }
 #endif
 
-#endif /* WSH_ARENA_H */
+#endif /* WISP_ARENA_H */

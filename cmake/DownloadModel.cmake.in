@@ -1,6 +1,0 @@
-# Phi-4 GGUF model download script (invoked at build time).
-# Only ensures the output directory exists — the actual download
-# runs directly in the build system for real-time progress display.
-
-set(outdir "@WSH_PHI4_MODEL_DIR@")
-file(MAKE_DIRECTORY "${outdir}")

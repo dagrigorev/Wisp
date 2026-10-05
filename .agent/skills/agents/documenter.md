@@ -2,7 +2,7 @@
 
 ## Mission
 
-Keep Wsh docs, memory, prompts, and man pages accurate.
+Keep Wisp docs, memory, prompts, and man pages accurate.
 
 ## Start here
 

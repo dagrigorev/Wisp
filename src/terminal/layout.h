@@ -1,8 +1,8 @@
 #pragma once
-#ifndef WSH_TERMINAL_LAYOUT_H
-#define WSH_TERMINAL_LAYOUT_H
+#ifndef WISP_TERMINAL_LAYOUT_H
+#define WISP_TERMINAL_LAYOUT_H
 
-#include "wsh_bool.h"
+#include "wisp_bool.h"
 
 #ifdef __cplusplus
 extern "C" {

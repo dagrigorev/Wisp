@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Find the minimal Wsh source area needed for the task.
+Find the minimal Wisp source area needed for the task.
 
 ## When to use
 

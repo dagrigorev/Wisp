@@ -27,7 +27,7 @@ Use this map when adding, finding, running, stabilizing, or documenting tests an
 ### GUI/input/pane/rendering behavior is interactive
 
 - [Manual QA](../skills/testing/manual-qa.md)
-- Check logs: `%LOCALAPPDATA%\Wsh\logs\wsh.log`
+- Check logs: `%LOCALAPPDATA%\Wisp\logs\wisp.log`
 
 ### Regression after a fix/refactor
 

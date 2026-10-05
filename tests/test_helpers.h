@@ -1,16 +1,16 @@
 #pragma once
 /*
- * test_helpers.h — Minimal unit-test framework for Wsh.
+ * test_helpers.h — Minimal unit-test framework for Wisp.
  * MSVC-compatible: uses C++ static-initializer trick for auto-registration.
  * Test files are compiled as C++ via /TP in CMakeLists.
  */
-#ifndef WSH_TEST_HELPERS_H
-#define WSH_TEST_HELPERS_H
+#ifndef WISP_TEST_HELPERS_H
+#define WISP_TEST_HELPERS_H
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "wsh_bool.h"
+#include "wisp_bool.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,13 +24,13 @@ typedef struct {
     TestFn      fn;
 } TestCase;
 
-#define MAX_TESTS 256
+#define MAX_TESTS 1024
 extern TestCase g_tests[MAX_TESTS];
 extern int      g_test_count;
 extern int      g_pass_count;
 extern int      g_fail_count;
 
-void wsh_register_test(const char *suite, const char *name, TestFn fn);
+void wisp_register_test(const char *suite, const char *name, TestFn fn);
 int  run_all_tests(void);
 
 #ifdef __cplusplus
@@ -78,7 +78,7 @@ int  run_all_tests(void);
     namespace { \
         struct _Reg_##suite_name##_##test_name { \
             _Reg_##suite_name##_##test_name() { \
-                wsh_register_test(#suite_name, #test_name, \
+                wisp_register_test(#suite_name, #test_name, \
                                   _test_##suite_name##_##test_name); \
             } \
         } _reg_##suite_name##_##test_name; \
@@ -88,4 +88,4 @@ int  run_all_tests(void);
 #error "Test files must be compiled as C++ (use /TP flag)"
 #endif
 
-#endif /* WSH_TEST_HELPERS_H */
+#endif /* WISP_TEST_HELPERS_H */

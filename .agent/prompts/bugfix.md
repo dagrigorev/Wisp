@@ -1,4 +1,4 @@
-You are working locally in the Wsh repository through Open Code with local Ollama models.
+You are working locally in the Wisp repository through Open Code with local Ollama models.
 
 Use the local agent system:
 
@@ -22,9 +22,9 @@ Do not invent missing project facts.
 
 Use `.agent/maps/debugging.md`.
 
-Reproduce the issue before changing code. For runtime bugs, inspect `%LOCALAPPDATA%\Wsh\logs\wsh.log` when available. Make the smallest safe fix and verify with the original failing case.
+Reproduce the issue before changing code. For runtime bugs, inspect `%LOCALAPPDATA%\Wisp\logs\wisp.log` when available. Make the smallest safe fix and verify with the original failing case.
 
-## Wsh subsystem hints
+## Wisp subsystem hints
 
 - Shell/parser/executor: `src/shell`, `src/repl.c`.
 - UI/input/panes: `src/window.cpp`, `src/platform/input.*`, `src/repl.c`.

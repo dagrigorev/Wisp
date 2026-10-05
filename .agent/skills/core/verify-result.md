@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Check that the Wsh change works and did not break nearby behavior.
+Check that the Wisp change works and did not break nearby behavior.
 
 ## When to use
 

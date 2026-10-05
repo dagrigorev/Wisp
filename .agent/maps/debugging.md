@@ -34,13 +34,13 @@ Use this map when the task is related to crash, wrong behavior, logs, regression
 - [Propose Minimal Fix](../skills/debugging/propose-minimal-fix.md)
 - [Fix Bug](../skills/coding/fix-bug.md)
 
-## Wsh starting points
+## Wisp starting points
 
 - Shell/runtime: `src/shell`, `src/repl.c`
 - Terminal rendering/screen: `src/terminal`
 - Keyboard/window/panes: `src/window.cpp`, `src/platform/input.*`
 - ConPTY/external shell: `src/platform/pty.*`
-- Logs: `%LOCALAPPDATA%\Wsh\logs\wsh.log`
+- Logs: `%LOCALAPPDATA%\Wisp\logs\wisp.log`
 - Tests: `tests`, `ctest --test-dir build --output-on-failure`
 
 ## Finish

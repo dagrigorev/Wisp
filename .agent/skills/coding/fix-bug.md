@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Fix a confirmed Wsh bug with the smallest safe change.
+Fix a confirmed Wisp bug with the smallest safe change.
 
 ## When to use
 

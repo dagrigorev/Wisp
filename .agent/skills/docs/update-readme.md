@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Update Wsh README or high-level docs accurately.
+Update Wisp README or high-level docs accurately.
 
 ## When to use
 

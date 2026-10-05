@@ -1,9 +1,9 @@
 #pragma once
-#ifndef WSH_WINDOW_H
-#define WSH_WINDOW_H
+#ifndef WISP_WINDOW_H
+#define WISP_WINDOW_H
 
 #include <windows.h>
-#include "wsh_bool.h"
+#include "wisp_bool.h"
 #include "platform/config.h"
 
 
@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-/* Register the Wsh window class. Must be called once before CreateWindow. */
+/* Register the Wisp window class. Must be called once before CreateWindow. */
 bool window_register_class(HINSTANCE hInst);
 
 /* Create the main terminal window. Returns NULL on failure. */
@@ -25,4 +25,4 @@ bool window_has_running_jobs(HWND hwnd);
 }
 #endif
 
-#endif /* WSH_WINDOW_H */
+#endif /* WISP_WINDOW_H */

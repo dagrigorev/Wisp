@@ -18,7 +18,7 @@
 
 1. Use [Debugging Map](maps/debugging.md).
 2. Reproduce the issue or document why reproduction is impossible.
-3. Check `%LOCALAPPDATA%\Wsh\logs\wsh.log` when runtime behavior is involved.
+3. Check `%LOCALAPPDATA%\Wisp\logs\wisp.log` when runtime behavior is involved.
 4. Identify the likely subsystem from [Project Summary](memory/project-summary.md).
 5. Read the smallest source slice.
 6. Isolate root cause before patching.

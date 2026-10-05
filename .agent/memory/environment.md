@@ -17,10 +17,10 @@ Agents should work locally, inspect files directly, and avoid unnecessary large 
 - Test runner: CTest.
 - Runtime graphics/UI stack: Win32, Direct2D, DirectWrite.
 - External shell hosting: Windows ConPTY.
-- Main build helper: `build-and-run-wsh.ps1`.
+- Main build helper: `build-and-run-wisp.ps1`.
 - Typical runnable output: `build-run\dist`.
-- Runtime config: `%APPDATA%\Wsh\Wsh.toml`.
-- Runtime logs: `%LOCALAPPDATA%\Wsh\logs\wsh.log`.
+- Runtime config: `%APPDATA%\Wisp\Wisp.toml`.
+- Runtime logs: `%LOCALAPPDATA%\Wisp\logs\wisp.log`.
 
 ## Local model guidance
 

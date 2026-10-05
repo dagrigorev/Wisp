@@ -2,21 +2,21 @@
 setlocal EnableDelayedExpansion
 
 echo ================================================================
-echo   Wsh Terminal Emulator — Installer
+echo   Wisp Terminal Emulator — Installer
 echo ================================================================
 echo.
 
-:: Check if Wsh.exe exists
-if not exist "Wsh.exe" (
-    echo ERROR: Wsh.exe not found in current directory.
-    echo Please run this script from the directory containing Wsh.exe.
+:: Check if Wisp.exe exists
+if not exist "Wisp.exe" (
+    echo ERROR: Wisp.exe not found in current directory.
+    echo Please run this script from the directory containing Wisp.exe.
     echo Build first with: nmake
     pause
     exit /b 1
 )
 
 :: Set install destination
-set "DEST=%LOCALAPPDATA%\Wsh"
+set "DEST=%LOCALAPPDATA%\Wisp"
 echo Installing to: %DEST%
 echo.
 
@@ -31,17 +31,17 @@ if not exist "%DEST%" (
 )
 
 :: Copy executable
-copy /Y "Wsh.exe" "%DEST%\Wsh.exe" >nul
+copy /Y "Wisp.exe" "%DEST%\Wisp.exe" >nul
 if errorlevel 1 (
-    echo ERROR: Failed to copy Wsh.exe to %DEST%
+    echo ERROR: Failed to copy Wisp.exe to %DEST%
     pause
     exit /b 1
 )
-echo [OK] Copied Wsh.exe to %DEST%
+echo [OK] Copied Wisp.exe to %DEST%
 
 :: Register in App Paths so it can be found by name
-reg add "HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Wsh.exe" ^
-    /ve /d "%DEST%\Wsh.exe" /f >nul
+reg add "HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Wisp.exe" ^
+    /ve /d "%DEST%\Wisp.exe" /f >nul
 if errorlevel 1 (
     echo [WARN] Could not register App Paths entry.
 ) else (
@@ -52,32 +52,32 @@ if errorlevel 1 (
 reg add "HKCU\Console" /v FaceName /t REG_SZ /d "Cascadia Code" /f >nul 2>&1
 echo [OK] Set preferred console font.
 
-:: Add "Open Wsh here" to Explorer background context menu
-reg add "HKCU\SOFTWARE\Classes\Directory\Background\shell\Wsh" ^
-    /ve /d "Open Wsh here" /f >nul
-reg add "HKCU\SOFTWARE\Classes\Directory\Background\shell\Wsh" ^
-    /v "Icon" /d "%DEST%\Wsh.exe,0" /f >nul
-reg add "HKCU\SOFTWARE\Classes\Directory\Background\shell\Wsh\command" ^
-    /ve /d "\"%DEST%\Wsh.exe\" --cwd \"%%V\"" /f >nul
-echo [OK] Added Explorer context menu: "Open Wsh here" (background).
+:: Add "Open Wisp here" to Explorer background context menu
+reg add "HKCU\SOFTWARE\Classes\Directory\Background\shell\Wisp" ^
+    /ve /d "Open Wisp here" /f >nul
+reg add "HKCU\SOFTWARE\Classes\Directory\Background\shell\Wisp" ^
+    /v "Icon" /d "%DEST%\Wisp.exe,0" /f >nul
+reg add "HKCU\SOFTWARE\Classes\Directory\Background\shell\Wisp\command" ^
+    /ve /d "\"%DEST%\Wisp.exe\" --cwd \"%%V\"" /f >nul
+echo [OK] Added Explorer context menu: "Open Wisp here" (background).
 
-:: Add "Open Wsh here" to Explorer folder context menu
-reg add "HKCU\SOFTWARE\Classes\Directory\shell\Wsh" ^
-    /ve /d "Open Wsh here" /f >nul
-reg add "HKCU\SOFTWARE\Classes\Directory\shell\Wsh" ^
-    /v "Icon" /d "%DEST%\Wsh.exe,0" /f >nul
-reg add "HKCU\SOFTWARE\Classes\Directory\shell\Wsh\command" ^
-    /ve /d "\"%DEST%\Wsh.exe\" --cwd \"%%1\"" /f >nul
-echo [OK] Added Explorer context menu: "Open Wsh here" (folder).
+:: Add "Open Wisp here" to Explorer folder context menu
+reg add "HKCU\SOFTWARE\Classes\Directory\shell\Wisp" ^
+    /ve /d "Open Wisp here" /f >nul
+reg add "HKCU\SOFTWARE\Classes\Directory\shell\Wisp" ^
+    /v "Icon" /d "%DEST%\Wisp.exe,0" /f >nul
+reg add "HKCU\SOFTWARE\Classes\Directory\shell\Wisp\command" ^
+    /ve /d "\"%DEST%\Wisp.exe\" --cwd \"%%1\"" /f >nul
+echo [OK] Added Explorer context menu: "Open Wisp here" (folder).
 
 :: Optionally create a Desktop shortcut
 set /p CREATE_SHORTCUT="Create Desktop shortcut? [Y/N]: "
 if /i "%CREATE_SHORTCUT%"=="Y" (
     powershell -NoProfile -Command ^
-        "$s=(New-Object -COM WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop')+'\Wsh.lnk');" ^
-        "$s.TargetPath='%DEST%\Wsh.exe';" ^
+        "$s=(New-Object -COM WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop')+'\Wisp.lnk');" ^
+        "$s.TargetPath='%DEST%\Wisp.exe';" ^
         "$s.WorkingDirectory='%DEST%';" ^
-        "$s.Description='Wsh Terminal Emulator';" ^
+        "$s.Description='Wisp Terminal Emulator';" ^
         "$s.Save()" >nul 2>&1
     echo [OK] Created Desktop shortcut.
 )
@@ -100,9 +100,9 @@ echo ================================================================
 echo   Installation complete!
 echo.
 echo   You can now:
-echo     - Run Wsh from Start menu (search "Wsh")
-echo     - Right-click any folder in Explorer to "Open Wsh here"
-echo     - Type 'wsh' in any terminal (if added to PATH)
+echo     - Run Wisp from Start menu (search "Wisp")
+echo     - Right-click any folder in Explorer to "Open Wisp here"
+echo     - Type 'wisp' in any terminal (if added to PATH)
 echo ================================================================
 echo.
 pause

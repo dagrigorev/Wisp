@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Make the smallest safe code or docs change for the selected Wsh task.
+Make the smallest safe code or docs change for the selected Wisp task.
 
 ## When to use
 

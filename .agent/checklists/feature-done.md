@@ -1,7 +1,7 @@
 # Feature Done Checklist
 
 - [ ] Observable behavior is implemented.
-- [ ] Feature fits Wsh module boundaries.
+- [ ] Feature fits Wisp module boundaries.
 - [ ] No fake UI/status data was added.
 - [ ] Tests were added or skipped reason is documented.
 - [ ] Manual QA is recorded for interactive behavior.

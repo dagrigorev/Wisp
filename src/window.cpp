@@ -14,12 +14,12 @@ bool window_register_class(HINSTANCE hInst) {
     wc.hInstance     = hInst;
     wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = NULL; /* We paint our own background */
-    wc.lpszClassName = L"Wsh";
+    wc.lpszClassName = L"Wisp";
     wc.hIcon         = LoadIcon(hInst, MAKEINTRESOURCE(1));
     wc.hIconSm       = LoadIcon(hInst, MAKEINTRESOURCE(1));
 
     if (!RegisterClassExW(&wc)) {
-        wsh_log_win32("RegisterClassExW");
+        wisp_log_win32("RegisterClassExW");
         return false;
     }
     return true;
@@ -41,8 +41,8 @@ HWND window_create(HINSTANCE hInst, const Config *cfg, int nShow) {
 
     HWND hwnd = CreateWindowExW(
         ex_style,
-        L"Wsh",
-        L"Wsh",
+        L"Wisp",
+        L"Wisp",
         style,
         CW_USEDEFAULT, CW_USEDEFAULT,
         win_w, win_h,
@@ -51,7 +51,7 @@ HWND window_create(HINSTANCE hInst, const Config *cfg, int nShow) {
     );
 
     if (!hwnd) {
-        wsh_log_win32("CreateWindowExW");
+        wisp_log_win32("CreateWindowExW");
         return NULL;
     }
 

@@ -1,4 +1,4 @@
-You are working locally in the Wsh repository through Open Code with local Ollama models.
+You are working locally in the Wisp repository through Open Code with local Ollama models.
 
 Use the local agent system:
 

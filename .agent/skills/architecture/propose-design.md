@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Design a small Wsh change that fits existing boundaries.
+Design a small Wisp change that fits existing boundaries.
 
 ## When to use
 

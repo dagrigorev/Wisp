@@ -18,7 +18,7 @@ Therefore:
 - Use `.agent/memory/project-summary.md` before scanning the whole repository.
 - Prefer `docs/ARCHITECTURE.md` over recursively reading all source files when choosing a subsystem.
 
-## Wsh agent routing
+## Wisp agent routing
 
 - Build or linker failure: [Release Engineer Agent](skills/agents/release-engineer.md) or [Debugger Agent](skills/agents/debugger.md).
 - Runtime crash, wrong terminal behavior, pane/input/scrollback bug: [Debugger Agent](skills/agents/debugger.md).
@@ -44,4 +44,4 @@ Use:
 - Prefer [Before Change Checklist](checklists/before-change.md) and [After Change Checklist](checklists/after-change.md).
 - Do not edit legacy duplicate root-level `src/*.c|*.h` files unless the task is specifically about removing or comparing them.
 - Do not claim Zsh compatibility beyond what is implemented and tested.
-- Do not introduce fake UI/status data; Wsh UI should display real runtime state or show unavailable.
+- Do not introduce fake UI/status data; Wisp UI should display real runtime state or show unavailable.

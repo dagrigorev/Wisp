@@ -1,18 +1,24 @@
 #include "test_helpers.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 TestCase g_tests[MAX_TESTS];
 int      g_test_count = 0;
 int      g_pass_count = 0;
 int      g_fail_count = 0;
 
-/* Called by C test files via the WSH_TEST_REGISTER macro */
-void wsh_register_test(const char *suite, const char *name, TestFn fn) {
+/* Called by C test files via the WISP_TEST_REGISTER macro */
+void wisp_register_test(const char *suite, const char *name, TestFn fn) {
     if (g_test_count < MAX_TESTS) {
         g_tests[g_test_count].suite = suite;
         g_tests[g_test_count].name  = name;
         g_tests[g_test_count].fn    = fn;
         g_test_count++;
+    } else {
+        /* Dropping a test silently would report a partial run as a pass. */
+        fprintf(stderr, "MAX_TESTS (%d) exceeded registering %s::%s\n",
+                MAX_TESTS, suite, name);
+        exit(1);
     }
 }
 

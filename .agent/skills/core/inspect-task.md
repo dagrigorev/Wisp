@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Convert the user request into a small actionable Wsh task.
+Convert the user request into a small actionable Wisp task.
 
 ## When to use
 

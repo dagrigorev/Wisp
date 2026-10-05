@@ -2,7 +2,7 @@
 
 ## Use this map when
 
-Use this map when the task affects Wsh shell semantics, command execution, builtins, history, jobs, completion, environment, config parsing, or companion utilities.
+Use this map when the task affects Wisp shell semantics, command execution, builtins, history, jobs, completion, environment, config parsing, or companion utilities.
 
 ## Start
 

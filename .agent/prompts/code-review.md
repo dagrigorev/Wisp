@@ -1,4 +1,4 @@
-You are working locally in the Wsh repository through Open Code with local Ollama models.
+You are working locally in the Wisp repository through Open Code with local Ollama models.
 
 Use the local agent system:
 
@@ -24,7 +24,7 @@ Review only the changed area and its nearest dependencies.
 
 Check:
 
-- Wsh module boundaries;
+- Wisp module boundaries;
 - legacy duplicate source edits;
 - build/test impact;
 - runtime resource copy impact;

@@ -8,7 +8,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "renderer.h"
-#include "screen.h"
+#include "screen_view.h"
 #include "../platform/config.h"
 #include "font.h"
 #include "layout.h"
@@ -39,15 +39,29 @@ static void build_palette(Renderer *r, const Config *cfg) {
     r->selection_color=renderer_rgb_to_color(cfg->colors.selection);
 }
 
+/* Cells store a style ID, so drawing resolves it through the buffer's table.
+   The attr-taking forms exist so a paint loop can resolve once per cell
+   rather than once per field it reads. */
+static Color4F resolve_fg_attr(const Renderer *r, const CellAttr &a) {
+    if (a.fg_idx==0xFF) return renderer_rgb_to_color(a.fg_rgb);
+    if (a.dim) { Color4F c=r->palette[a.fg_idx]; c.r*=.5f;c.g*=.5f;c.b*=.5f; return c; }
+    return r->palette[a.fg_idx<256?a.fg_idx:7];
+}
+static Color4F resolve_bg_attr(const Renderer *r, const CellAttr &a) {
+    if (a.bg_idx==0xFF) return renderer_rgb_to_color(a.bg_rgb);
+    if (a.bg_idx==0) return r->bg_color;
+    return r->palette[a.bg_idx<256?a.bg_idx:0];
+}
+
+static CellAttr cell_attr(const Renderer *r, const ScreenCell *cell) {
+    return style_table_resolve(r->styles, cell->style_id);
+}
+
 Color4F renderer_resolve_fg(const Renderer *r, const ScreenCell *cell) {
-    if (cell->attr.fg_idx==0xFF) return renderer_rgb_to_color(cell->attr.fg_rgb);
-    if (cell->attr.dim) { Color4F c=r->palette[cell->attr.fg_idx]; c.r*=.5f;c.g*=.5f;c.b*=.5f; return c; }
-    return r->palette[cell->attr.fg_idx<256?cell->attr.fg_idx:7];
+    return resolve_fg_attr(r, cell_attr(r, cell));
 }
 Color4F renderer_resolve_bg(const Renderer *r, const ScreenCell *cell) {
-    if (cell->attr.bg_idx==0xFF) return renderer_rgb_to_color(cell->attr.bg_rgb);
-    if (cell->attr.bg_idx==0) return r->bg_color;
-    return r->palette[cell->attr.bg_idx<256?cell->attr.bg_idx:0];
+    return resolve_bg_attr(r, cell_attr(r, cell));
 }
 
 static bool create_rt(Renderer *r) {
@@ -64,7 +78,7 @@ static bool create_rt(Renderer *r) {
     D2D1_HWND_RENDER_TARGET_PROPERTIES hp; hp.hwnd=r->hwnd; hp.pixelSize=sz; hp.presentOptions=D2D1_PRESENT_OPTIONS_NONE;
 
     HRESULT hr=r->d2d_factory->CreateHwndRenderTarget(rp,hp,&r->render_target);
-    if (FAILED(hr)) { WSH_LOG_ERROR("CreateHwndRenderTarget: 0x%08X",hr); return false; }
+    if (FAILED(hr)) { WISP_LOG_ERROR("CreateHwndRenderTarget: 0x%08X",hr); return false; }
 
     if (r->fg_brush)     { r->fg_brush->Release();     r->fg_brush=NULL; }
     if (r->bg_brush)     { r->bg_brush->Release();     r->bg_brush=NULL; }
@@ -82,15 +96,12 @@ bool renderer_init(Renderer *r, HWND hwnd, const Config *cfg) {
     build_palette(r, cfg);
     D2D1_FACTORY_OPTIONS opts={D2D1_DEBUG_LEVEL_NONE};
     HRESULT hr=D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,opts,&r->d2d_factory);
-    if (FAILED(hr)) { WSH_LOG_ERROR("D2D1CreateFactory: 0x%08X",hr); return false; }
+    if (FAILED(hr)) { WISP_LOG_ERROR("D2D1CreateFactory: 0x%08X",hr); return false; }
     if (!create_rt(r)) return false;
-    if (!font_init(&r->font,cfg->font.family,cfg->font.size,r->dpi)) { WSH_LOG_ERROR("font_init failed"); return false; }
+    if (!font_init(&r->font,cfg->font.family,cfg->font.size,r->dpi)) { WISP_LOG_ERROR("font_init failed"); return false; }
     r->cell_w=r->font.cell_width; r->cell_h=r->font.cell_height;
     r->cursor_style=cfg->cursor.style; r->cursor_visible=true; r->cursor_blink_state=true;
     r->tab_bar_height=0;
-    r->reasoning_line1[0] = L'\0';
-    r->reasoning_line2[0] = L'\0';
-    r->reasoning_active = false;
     if (cfg->cursor.blink) r->blink_timer_id=SetTimer(hwnd,1,cfg->cursor.blink_rate_ms,NULL);
     RECT rc; GetClientRect(hwnd,&rc); renderer_resize(r,rc.right-rc.left,rc.bottom-rc.top);
     return true;
@@ -149,6 +160,11 @@ void renderer_paint_region(Renderer *r, const ScreenBuffer *sb, const RECT *rect
                            bool active, bool cursor_shown, int cursor_x, int cursor_y) {
     if (!r || !r->render_target || !r->font.fmt_normal || !sb || !rect) return;
 
+    /* Cells hold style IDs, so drawing needs this buffer's table to resolve
+       them. Panes each have their own buffer, so this is set per paint
+       rather than once at init. */
+    r->styles = sb->styles;
+
     float pane_w = (float)(rect->right - rect->left);
     float pane_h = (float)(rect->bottom - rect->top);
     if (pane_w <= 1.0f || pane_h <= 1.0f) return;
@@ -203,8 +219,9 @@ void renderer_paint_region(Renderer *r, const ScreenBuffer *sb, const RECT *rect
             float cx = ox + col * r->cell_w;
             float cy = oy + row * r->cell_h;
             D2D1_RECT_F cr = {cx, cy, cx + r->cell_w, cy + r->cell_h};
-            Color4F fg = renderer_resolve_fg(r, cell), bgcc = renderer_resolve_bg(r, cell);
-            if (cell->attr.reverse) { Color4F t = fg; fg = bgcc; bgcc = t; }
+            const CellAttr ca = cell_attr(r, cell);
+            Color4F fg = resolve_fg_attr(r, ca), bgcc = resolve_bg_attr(r, ca);
+            if (ca.reverse) { Color4F t = fg; fg = bgcc; bgcc = t; }
 
             if (bgcc.r != r->bg_color.r || bgcc.g != r->bg_color.g || bgcc.b != r->bg_color.b) {
                 D2D1_COLOR_F d = to_d2d(bgcc); r->bg_brush->SetColor(d);
@@ -244,9 +261,9 @@ void renderer_paint_region(Renderer *r, const ScreenBuffer *sb, const RECT *rect
                 else { uint32_t cp = cell->ch - 0x10000; wch[0] = (wchar_t)(0xD800 | (cp >> 10)); wch[1] = (wchar_t)(0xDC00 | (cp & 0x3FF)); wch[2] = 0; }
 
                 IDWriteTextFormat *fmt = r->font.fmt_normal;
-                if (cell->attr.bold && cell->attr.italic) fmt = r->font.fmt_bold_italic;
-                else if (cell->attr.bold) fmt = r->font.fmt_bold;
-                else if (cell->attr.italic) fmt = r->font.fmt_italic;
+                if (ca.bold && ca.italic) fmt = r->font.fmt_bold_italic;
+                else if (ca.bold) fmt = r->font.fmt_bold;
+                else if (ca.italic) fmt = r->font.fmt_italic;
 
                 IDWriteTextLayout *layout = NULL;
                 if (r->font.factory) r->font.factory->CreateTextLayout(wch, (UINT32)(cell->ch >= 0x10000 ? 2 : 1), fmt, r->cell_w * (cell->wide ? 2.0f : 1.0f), r->cell_h, &layout);
@@ -255,7 +272,7 @@ void renderer_paint_region(Renderer *r, const ScreenBuffer *sb, const RECT *rect
                     r->render_target->DrawTextLayout(orig, layout, r->fg_brush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
                     layout->Release();
                 }
-                if (cell->attr.underline) {
+                if (ca.underline) {
                     float uy = cy + r->cell_h - 2.0f;
                     D2D1_POINT_2F p1 = {cx, uy}, p2 = {cx + r->cell_w, uy}; D2D1_COLOR_F d = to_d2d(fg); r->fg_brush->SetColor(d);
                     r->render_target->DrawLine(p1, p2, r->fg_brush, 1.0f, NULL);
@@ -310,44 +327,13 @@ void renderer_paint_region(Renderer *r, const ScreenBuffer *sb, const RECT *rect
         }
     }
 
-    /* ── Inline suggestion on the row after cursor (proactive AI) ──────────── */
-    /* Rendered below grid when cursor is on last row; clip rect handles overflow */
-    if (active && r->reasoning_active && r->reasoning_line1[0]) {
-        int suggest_row = cursor_y + 1;
-        float sy = oy + (float)suggest_row * r->cell_h;
-        D2D1_RECT_F row_rc = {ox, sy, ox + cols * r->cell_w, sy + r->cell_h};
-
-        /* Dimmed background for the suggestion row */
-        D2D1_COLOR_F dim_bg = to_d2d(r->bg_color);
-        dim_bg.a = 0.45f;
-        r->bg_brush->SetColor(dim_bg);
-        r->render_target->FillRectangle(row_rc, r->bg_brush);
-
-        /* Draw suggestion text in italic, dimmed */
-        D2D1_COLOR_F dim_fg = to_d2d(r->fg_color);
-        dim_fg.a = 0.50f;
-        r->fg_brush->SetColor(dim_fg);
-
-        IDWriteTextLayout *layout = NULL;
-        if (r->font.factory) {
-            r->font.factory->CreateTextLayout(
-                r->reasoning_line1, (UINT32)wcslen(r->reasoning_line1),
-                r->font.fmt_italic ? r->font.fmt_italic : r->font.fmt_normal,
-                cols * r->cell_w, r->cell_h, &layout);
-        }
-        if (layout) {
-            D2D1_POINT_2F orig = {ox, sy};
-            r->render_target->DrawTextLayout(orig, layout, r->fg_brush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
-            layout->Release();
-        }
-    }
-
     r->render_target->PopAxisAlignedClip();
     renderer_draw_pane_border(r, rect, active);
 }
 
 void renderer_paint(Renderer *r, const ScreenBuffer *sb, bool cursor_shown, int cursor_x, int cursor_y) {
     if (!r->render_target||!r->font.fmt_normal) return;
+    r->styles = sb->styles;
     r->render_target->BeginDraw();
     D2D1_COLOR_F bgc=to_d2d(r->bg_color); r->render_target->Clear(&bgc);
 
@@ -362,8 +348,9 @@ void renderer_paint(Renderer *r, const ScreenBuffer *sb, bool cursor_shown, int 
 
         float cx=ox+col*r->cell_w, cy=oy+row*r->cell_h;
         D2D1_RECT_F cr={cx,cy,cx+r->cell_w,cy+r->cell_h};
-        Color4F fg=renderer_resolve_fg(r,cell), bgcc=renderer_resolve_bg(r,cell);
-        if (cell->attr.reverse) { Color4F t=fg; fg=bgcc; bgcc=t; }
+        const CellAttr ca = cell_attr(r, cell);
+        Color4F fg=resolve_fg_attr(r,ca), bgcc=resolve_bg_attr(r,ca);
+        if (ca.reverse) { Color4F t=fg; fg=bgcc; bgcc=t; }
 
         if (bgcc.r!=r->bg_color.r||bgcc.g!=r->bg_color.g||bgcc.b!=r->bg_color.b) {
             D2D1_COLOR_F d=to_d2d(bgcc); r->bg_brush->SetColor(d);
@@ -402,9 +389,9 @@ void renderer_paint(Renderer *r, const ScreenBuffer *sb, bool cursor_shown, int 
             else { uint32_t cp=cell->ch-0x10000; wch[0]=(wchar_t)(0xD800|(cp>>10)); wch[1]=(wchar_t)(0xDC00|(cp&0x3FF)); wch[2]=0; }
 
             IDWriteTextFormat *fmt=r->font.fmt_normal;
-            if (cell->attr.bold&&cell->attr.italic) fmt=r->font.fmt_bold_italic;
-            else if (cell->attr.bold)               fmt=r->font.fmt_bold;
-            else if (cell->attr.italic)             fmt=r->font.fmt_italic;
+            if (ca.bold&&ca.italic) fmt=r->font.fmt_bold_italic;
+            else if (ca.bold)       fmt=r->font.fmt_bold;
+            else if (ca.italic)     fmt=r->font.fmt_italic;
 
             IDWriteTextLayout *layout=NULL;
             if (r->font.factory) r->font.factory->CreateTextLayout(wch,(UINT32)(cell->ch>=0x10000?2:1),fmt,r->cell_w*(cell->wide?2.0f:1.0f),r->cell_h,&layout);
@@ -413,7 +400,7 @@ void renderer_paint(Renderer *r, const ScreenBuffer *sb, bool cursor_shown, int 
                 r->render_target->DrawTextLayout(orig,layout,r->fg_brush,D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
                 layout->Release();
             }
-            if (cell->attr.underline) {
+            if (ca.underline) {
                 float uy=cy+r->cell_h-2.0f;
                 D2D1_POINT_2F p1={cx,uy},p2={cx+r->cell_w,uy}; D2D1_COLOR_F d=to_d2d(fg); r->fg_brush->SetColor(d);
                 r->render_target->DrawLine(p1,p2,r->fg_brush,1.0f,NULL);

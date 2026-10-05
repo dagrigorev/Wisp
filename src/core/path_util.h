@@ -5,10 +5,10 @@
  * All returned strings are heap-allocated; free with str_free().
  * Keeps path operations isolated from string utilities (SRP).
  */
-#ifndef WSH_PATH_UTIL_H
-#define WSH_PATH_UTIL_H
+#ifndef WISP_PATH_UTIL_H
+#define WISP_PATH_UTIL_H
 
-#include "wsh_bool.h"
+#include "wisp_bool.h"
 
 
 #ifdef __cplusplus
@@ -42,4 +42,4 @@ bool  path_mkdirs(const char *path);
 }
 #endif
 
-#endif /* WSH_PATH_UTIL_H */
+#endif /* WISP_PATH_UTIL_H */

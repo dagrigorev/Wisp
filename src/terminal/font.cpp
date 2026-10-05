@@ -39,7 +39,7 @@ bool font_init(FontState *fs, const wchar_t *family, float pt_size, float dpi) {
     wcsncpy(fs->family, family?family:L"Cascadia Code", 127);
     fs->pt_size=pt_size>0?pt_size:13.0f;
     HRESULT hr=DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,__uuidof(IDWriteFactory),(IUnknown**)&fs->factory);
-    if (FAILED(hr)||!fs->factory) { WSH_LOG_ERROR("DWriteCreateFactory: 0x%08X",hr); return false; }
+    if (FAILED(hr)||!fs->factory) { WISP_LOG_ERROR("DWriteCreateFactory: 0x%08X",hr); return false; }
     float px=fs->pt_size*dpi/72.0f;
     fs->fmt_normal     =make_fmt(fs->factory,fs->family,px,DWRITE_FONT_WEIGHT_NORMAL,DWRITE_FONT_STYLE_NORMAL);
     fs->fmt_bold       =make_fmt(fs->factory,fs->family,px,DWRITE_FONT_WEIGHT_BOLD,  DWRITE_FONT_STYLE_NORMAL);

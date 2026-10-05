@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Keep existing Wsh user-visible behavior stable during fixes/refactors.
+Keep existing Wisp user-visible behavior stable during fixes/refactors.
 
 ## When to use
 

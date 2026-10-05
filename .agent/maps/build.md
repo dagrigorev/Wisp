@@ -26,7 +26,7 @@ Use this map when configure, build, dependency, compiler, linker, test discovery
 ### Runtime files missing from dist
 
 - [Package Artifacts](../skills/build/package-artifacts.md)
-- Check: `WSH_DIST_DIR`, root `CMakeLists.txt`, `src/CMakeLists.txt`, `tools/CMakeLists.txt`.
+- Check: `WISP_DIST_DIR`, root `CMakeLists.txt`, `src/CMakeLists.txt`, `tools/CMakeLists.txt`.
 
 ### Tests do not build or register
 

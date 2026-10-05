@@ -2,7 +2,7 @@
 
 ## Task
 
-Implement a safer non-blocking execution path for long-running filesystem-related commands in WSH so the terminal does not freeze during fs-heavy operations (`ls`, `tree`, `grep`, `cp`, `mv`, `rm` on large dirs).
+Implement a safer non-blocking execution path for long-running filesystem-related commands in WISP so the terminal does not freeze during fs-heavy operations (`ls`, `tree`, `grep`, `cp`, `mv`, `rm` on large dirs).
 
 ## Root cause / architecture summary
 
@@ -29,7 +29,7 @@ WM_KEYDOWN → repl_handle_input → execute_line → CreateThread (kept alive)
                                                      │ done
                                                      ▼
                                               on_exec_done callback
-                                              PostMessage(WM_WSH_EXEC_DONE)
+                                              PostMessage(WM_WISP_EXEC_DONE)
                                                      │
                                                      ▼
                                               WndProc → repl_show_prompt()
@@ -38,7 +38,7 @@ WM_KEYDOWN → repl_handle_input → execute_line → CreateThread (kept alive)
 
 - **Thread tracking**: thread handle is saved and used for cancellation/timeout.
 - **Ctrl+C cancellation**: `repl_cancel_exec()` sets `ctx->cancel_requested`, signals the executor to break out of `WaitForSingleObject` loops, waits up to 3s for clean exit, then terminates as last resort.
-- **Prompt on main thread**: the worker thread invokes `on_exec_done` which posts a `WM_WSH_EXEC_DONE` message to the main window. The WndProc handler calls `repl_show_prompt()` under proper critical section ordering.
+- **Prompt on main thread**: the worker thread invokes `on_exec_done` which posts a `WM_WISP_EXEC_DONE` message to the main window. The WndProc handler calls `repl_show_prompt()` under proper critical section ordering.
 - **Cancel flag in executor**: `WaitForSingleObject(INFINITE)` replaced with a 50ms polling loop that checks `ctx->cancel_requested` and calls `TerminateProcess` on cancellation.
 
 ## Files changed
@@ -50,13 +50,13 @@ WM_KEYDOWN → repl_handle_input → execute_line → CreateThread (kept alive)
 | `src/shell/executor.c` | Polling loop in `WaitForSingleObject` + `forward_pipe_to_io` checks cancel flag |
 | `src/repl.h` | Changed `executing` to `volatile LONG`; added `exec_thread`, `exec_result`, `on_exec_done`, `repl_cancel_exec`, `repl_set_on_exec_done` |
 | `src/repl.c` | Completion callback; thread handle lifecycle; Ctrl+C cancellation; fallback prompt for no-callback path |
-| `src/main.cpp` | `repl_exec_done_cb` posts `WM_WSH_EXEC_DONE`; `WM_WSH_EXEC_DONE` handler calls `repl_show_prompt`; callback registered in `pane_start` |
+| `src/main.cpp` | `repl_exec_done_cb` posts `WM_WISP_EXEC_DONE`; `WM_WISP_EXEC_DONE` handler calls `repl_show_prompt`; callback registered in `pane_start` |
 
 ## Commands run
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wsh.ps1 -NoRun
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wsh.ps1 -NoRun -RunTests
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wisp.ps1 -NoRun
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wisp.ps1 -NoRun -RunTests
 ```
 
 ## Automated test result
@@ -67,9 +67,9 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wsh.ps1 -NoRun -Ru
 
 Performed:
 
-- **Binary startup**: Wsh.exe starts without crash, window is responsive.
+- **Binary startup**: Wisp.exe starts without crash, window is responsive.
 - **Ctrl+C interaction model**: During execution, Ctrl+C now sets the cancel flag and terminates the worker thread + child process. Tested via sleep command (external process wait loop picks up cancellation within 50ms).
-- **Prompt stability**: prompt is now always shown from the main thread via `PostMessage(WM_WSH_EXEC_DONE)`, avoiding thread-safety races.
+- **Prompt stability**: prompt is now always shown from the main thread via `PostMessage(WM_WISP_EXEC_DONE)`, avoiding thread-safety races.
 - **Quick commands** (`help`, `history`, `pwd`, `cd`, `echo`): still instant since they execute in the same worker thread as before.
 - **Tab completion**: unchanged — runs synchronously in the REPL before execution starts.
 
@@ -100,7 +100,7 @@ Items requiring interactive GUI verification (not possible in terminal-only envi
 1. **TerminateThread safety**: If a command does not respond to the cancel flag within 3 seconds, `TerminateThread` is called. This can leak resources (heap locks, CRITICAL_SECTIONs). In practice, the cancel flag is checked every 50ms in the wait loop, so clean exit should be the norm.
 2. **No input buffering**: Keystrokes typed during command execution are still silently dropped (except Ctrl+C). Full type-ahead would require an input buffer queue, which was out of scope.
 3. **Builtins are not cancellable mid-execution**: The cancel flag is only checked in the executor's `WaitForSingleObject` loop. Long-running builtins (e.g., a recursive `rm` implementation) would need their own cancellation points. Currently only external process commands are cancellable.
-4. **WM_WSH_EXEC_DONE ordering**: If multiple commands complete in rapid succession, the posted messages are queued and processed in order, so prompt ordering is correct.
+4. **WM_WISP_EXEC_DONE ordering**: If multiple commands complete in rapid succession, the posted messages are queued and processed in order, so prompt ordering is correct.
 
 ## Merge recommendation
 

@@ -1,9 +1,9 @@
 #pragma once
-#ifndef WSH_PTY_H
-#define WSH_PTY_H
+#ifndef WISP_PTY_H
+#define WISP_PTY_H
 
 #include <windows.h>
-#include "wsh_bool.h"
+#include "wisp_bool.h"
 
 
 #ifdef __cplusplus
@@ -63,4 +63,4 @@ DWORD pty_exit_code(PtySession *pty);
 }
 #endif
 
-#endif /* WSH_PTY_H */
+#endif /* WISP_PTY_H */

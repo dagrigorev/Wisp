@@ -81,26 +81,26 @@ TEST(StrUtil, UTF8Decode) {
 
 TEST(Unicode, CyrillicUtf8IsValidAndWidthOnePerChar) {
     const char *s = "Привет";
-    ASSERT_TRUE(wsh_utf8_validate_n(s, (int)strlen(s)));
-    ASSERT_EQ(wsh_utf8_display_width(s), 6);
+    ASSERT_TRUE(wisp_utf8_validate_n(s, (int)strlen(s)));
+    ASSERT_EQ(wisp_utf8_display_width(s), 6);
 }
 
 TEST(Unicode, Utf8OffsetsTreatCyrillicAsCharacters) {
     const char *s = "яa"; /* я = two UTF-8 bytes, a = one byte */
     int len = (int)strlen(s);
     ASSERT_EQ(len, 3);
-    ASSERT_EQ(wsh_utf8_next_offset(s, len, 0), 2);
-    ASSERT_EQ(wsh_utf8_next_offset(s, len, 2), 3);
-    ASSERT_EQ(wsh_utf8_prev_offset(s, 3), 2);
-    ASSERT_EQ(wsh_utf8_prev_offset(s, 2), 0);
+    ASSERT_EQ(wisp_utf8_next_offset(s, len, 0), 2);
+    ASSERT_EQ(wisp_utf8_next_offset(s, len, 2), 3);
+    ASSERT_EQ(wisp_utf8_prev_offset(s, 3), 2);
+    ASSERT_EQ(wisp_utf8_prev_offset(s, 2), 0);
 }
 
 TEST(Unicode, InvalidBytesCanBeConvertedForTerminal) {
     const char cp866_privet[] = { (char)0x8F, (char)0xE0, (char)0xA8, (char)0xA2, (char)0xA5, (char)0xE2, 0 };
     int out_len = 0;
-    char *u8 = wsh_bytes_to_utf8_for_terminal(cp866_privet, 6, &out_len);
+    char *u8 = wisp_bytes_to_utf8_for_terminal(cp866_privet, 6, &out_len);
     ASSERT_NOT_NULL(u8);
     ASSERT_TRUE(out_len > 0);
-    ASSERT_TRUE(wsh_utf8_validate_n(u8, out_len));
+    ASSERT_TRUE(wisp_utf8_validate_n(u8, out_len));
     str_free(u8);
 }

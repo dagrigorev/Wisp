@@ -1,6 +1,6 @@
 # Before Change Checklist
 
-- [ ] I understand the Wsh task.
+- [ ] I understand the Wisp task.
 - [ ] I selected the correct map.
 - [ ] I selected the correct skill.
 - [ ] I identified the target subsystem.

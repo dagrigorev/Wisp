@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Create a reliable Wsh reproduction before fixing.
+Create a reliable Wisp reproduction before fixing.
 
 ## When to use
 

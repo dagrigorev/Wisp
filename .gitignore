@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════════════════
-#  Wsh — .gitignore
+#  Wisp — .gitignore
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── CMake build directories ───────────────────────────────────────────────────
@@ -65,13 +65,13 @@ _CPack_Packages/
 
 # ── Runtime / user data ───────────────────────────────────────────────────────
 # Do NOT commit user config or history — these live in %APPDATA% and %USERPROFILE%
-*.wsh_history
-Wsh.toml
+*.wisp_history
+Wisp.toml
 .zshrc.local
 
-# Wsh log files
-*.wsh.log
-wsh_debug.log
+# Wisp log files
+*.wisp.log
+wisp_debug.log
 
 # ── Windows system junk ───────────────────────────────────────────────────────
 Thumbs.db

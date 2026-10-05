@@ -14,7 +14,7 @@
 #include <stdint.h>
 #include "log.h"
 
-#define WSH_LOG_DEFAULT_MAX_BYTES (10ULL * 1024ULL * 1024ULL)
+#define WISP_LOG_DEFAULT_MAX_BYTES (10ULL * 1024ULL * 1024ULL)
 
 static struct {
     LogLevel          min_level;
@@ -35,8 +35,8 @@ static void log_ensure_init(void) {
         g_log.min_level = LOG_DEBUG;
 #endif
         g_log.h_file = INVALID_HANDLE_VALUE;
-        g_log.max_bytes = WSH_LOG_DEFAULT_MAX_BYTES;
-        strcpy(g_log.app_name, "wsh");
+        g_log.max_bytes = WISP_LOG_DEFAULT_MAX_BYTES;
+        strcpy(g_log.app_name, "wisp");
         g_log.initialised = TRUE;
     }
 }
@@ -75,14 +75,14 @@ static BOOL build_default_log_path(char *out, int out_len) {
     if (n > 0 && n < MAX_PATH) {
         wchar_t app_dir[MAX_PATH];
         wchar_t log_dir[MAX_PATH];
-        _snwprintf(app_dir, MAX_PATH - 1, L"%s\\Wsh", root);
+        _snwprintf(app_dir, MAX_PATH - 1, L"%s\\Wisp", root);
         _snwprintf(log_dir, MAX_PATH - 1, L"%s\\logs", app_dir);
         app_dir[MAX_PATH - 1] = L'\0';
         log_dir[MAX_PATH - 1] = L'\0';
         make_dir_if_missing(app_dir);
         make_dir_if_missing(log_dir);
         wchar_t file[MAX_PATH];
-        _snwprintf(file, MAX_PATH - 1, L"%s\\wsh.log", log_dir);
+        _snwprintf(file, MAX_PATH - 1, L"%s\\wisp.log", log_dir);
         file[MAX_PATH - 1] = L'\0';
         WideCharToMultiByte(CP_UTF8, 0, file, -1, out, out_len, NULL, NULL);
         return TRUE;
@@ -96,7 +96,7 @@ static BOOL build_default_log_path(char *out, int out_len) {
         log_dir[MAX_PATH - 1] = L'\0';
         make_dir_if_missing(log_dir);
         wchar_t file[MAX_PATH];
-        _snwprintf(file, MAX_PATH - 1, L"%s\\wsh.log", log_dir);
+        _snwprintf(file, MAX_PATH - 1, L"%s\\wisp.log", log_dir);
         file[MAX_PATH - 1] = L'\0';
         WideCharToMultiByte(CP_UTF8, 0, file, -1, out, out_len, NULL, NULL);
         return TRUE;
@@ -104,17 +104,17 @@ static BOOL build_default_log_path(char *out, int out_len) {
     return FALSE;
 }
 
-void wsh_log_set_level(LogLevel level) {
+void wisp_log_set_level(LogLevel level) {
     log_ensure_init();
     g_log.min_level = level;
 }
 
-void wsh_log_set_max_file_size(unsigned long long max_bytes) {
+void wisp_log_set_max_file_size(unsigned long long max_bytes) {
     log_ensure_init();
     if (max_bytes > 0) g_log.max_bytes = max_bytes;
 }
 
-void wsh_log_set_file(const char *path) {
+void wisp_log_set_file(const char *path) {
     log_ensure_init();
     if (!path || !*path) return;
 
@@ -136,7 +136,7 @@ void wsh_log_set_file(const char *path) {
     LeaveCriticalSection(&g_log.lock);
 }
 
-void wsh_log_init_default(const char *app_name) {
+void wisp_log_init_default(const char *app_name) {
     log_ensure_init();
     if (app_name && *app_name) {
         strncpy(g_log.app_name, app_name, sizeof(g_log.app_name) - 1);
@@ -144,11 +144,11 @@ void wsh_log_init_default(const char *app_name) {
     }
     char path[MAX_PATH];
     if (build_default_log_path(path, MAX_PATH)) {
-        wsh_log_set_file(path);
+        wisp_log_set_file(path);
     }
 }
 
-void wsh_log_close(void) {
+void wisp_log_close(void) {
     log_ensure_init();
     EnterCriticalSection(&g_log.lock);
     if (g_log.h_file != INVALID_HANDLE_VALUE) {
@@ -179,7 +179,7 @@ static void truncate_if_needed_locked(DWORD next_write_len) {
     SetEndOfFile(g_log.h_file);
 }
 
-void wsh_log_write(LogLevel level, const char *file, int line, const char *fmt, ...) {
+void wisp_log_write(LogLevel level, const char *file, int line, const char *fmt, ...) {
     log_ensure_init();
     if (level < g_log.min_level) return;
 
@@ -199,7 +199,7 @@ void wsh_log_write(LogLevel level, const char *file, int line, const char *fmt, 
 
     char line_buf[2600];
     int n = _snprintf(line_buf, sizeof(line_buf) - 2,
-        "%04u-%02u-%02u %02u:%02u:%02u.%03u [WSH/%s] [%s] [%s:%d] %s\r\n",
+        "%04u-%02u-%02u %02u:%02u:%02u.%03u [WISP/%s] [%s] [%s:%d] %s\r\n",
         (unsigned)st.wYear, (unsigned)st.wMonth, (unsigned)st.wDay,
         (unsigned)st.wHour, (unsigned)st.wMinute, (unsigned)st.wSecond, (unsigned)st.wMilliseconds,
         g_log.app_name, level_tag(level), fname, line, msg);
@@ -222,7 +222,7 @@ void wsh_log_write(LogLevel level, const char *file, int line, const char *fmt, 
     LeaveCriticalSection(&g_log.lock);
 }
 
-void wsh_log_win32(const char *context) {
+void wisp_log_win32(const char *context) {
     DWORD err = GetLastError();
     char msg[512] = {0};
     FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
@@ -230,18 +230,18 @@ void wsh_log_win32(const char *context) {
     char *p = msg + strlen(msg);
     while (p > msg && (p[-1] == '\r' || p[-1] == '\n')) p--;
     *p = '\0';
-    WSH_LOG_ERROR("%s: Win32 error %lu - %s", context ? context : "Win32", (unsigned long)err, msg);
+    WISP_LOG_ERROR("%s: Win32 error %lu - %s", context ? context : "Win32", (unsigned long)err, msg);
 }
 
-static LONG WINAPI wsh_unhandled_exception_filter(EXCEPTION_POINTERS *ep) {
+static LONG WINAPI wisp_unhandled_exception_filter(EXCEPTION_POINTERS *ep) {
     DWORD code = ep && ep->ExceptionRecord ? ep->ExceptionRecord->ExceptionCode : 0;
     void *addr = ep && ep->ExceptionRecord ? ep->ExceptionRecord->ExceptionAddress : NULL;
-    WSH_LOG_ERROR("Unhandled structured exception: code=0x%08lX address=%p", (unsigned long)code, addr);
-    wsh_log_close();
+    WISP_LOG_ERROR("Unhandled structured exception: code=0x%08lX address=%p", (unsigned long)code, addr);
+    wisp_log_close();
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
-static void wsh_invalid_parameter_handler(const wchar_t *expression,
+static void wisp_invalid_parameter_handler(const wchar_t *expression,
                                           const wchar_t *function,
                                           const wchar_t *file,
                                           unsigned int line,
@@ -251,25 +251,25 @@ static void wsh_invalid_parameter_handler(const wchar_t *expression,
     if (expression) WideCharToMultiByte(CP_UTF8, 0, expression, -1, expr, sizeof(expr), NULL, NULL);
     if (function)   WideCharToMultiByte(CP_UTF8, 0, function, -1, func, sizeof(func), NULL, NULL);
     if (file)       WideCharToMultiByte(CP_UTF8, 0, file, -1, f, sizeof(f), NULL, NULL);
-    WSH_LOG_ERROR("Invalid CRT parameter: expression='%s' function='%s' file='%s' line=%u",
+    WISP_LOG_ERROR("Invalid CRT parameter: expression='%s' function='%s' file='%s' line=%u",
                   expr, func, f, line);
 }
 
-static void wsh_signal_handler(int sig) {
-    WSH_LOG_ERROR("Process signal received: %d", sig);
-    wsh_log_close();
+static void wisp_signal_handler(int sig) {
+    WISP_LOG_ERROR("Process signal received: %d", sig);
+    wisp_log_close();
     signal(sig, SIG_DFL);
     raise(sig);
 }
 
-void wsh_log_install_crash_handlers(void) {
+void wisp_log_install_crash_handlers(void) {
     log_ensure_init();
-    SetUnhandledExceptionFilter(wsh_unhandled_exception_filter);
-    _set_invalid_parameter_handler(wsh_invalid_parameter_handler);
-    signal(SIGABRT, wsh_signal_handler);
-    signal(SIGFPE,  wsh_signal_handler);
-    signal(SIGILL,  wsh_signal_handler);
-    signal(SIGINT,  wsh_signal_handler);
-    signal(SIGSEGV, wsh_signal_handler);
-    signal(SIGTERM, wsh_signal_handler);
+    SetUnhandledExceptionFilter(wisp_unhandled_exception_filter);
+    _set_invalid_parameter_handler(wisp_invalid_parameter_handler);
+    signal(SIGABRT, wisp_signal_handler);
+    signal(SIGFPE,  wisp_signal_handler);
+    signal(SIGILL,  wisp_signal_handler);
+    signal(SIGINT,  wisp_signal_handler);
+    signal(SIGSEGV, wisp_signal_handler);
+    signal(SIGTERM, wisp_signal_handler);
 }

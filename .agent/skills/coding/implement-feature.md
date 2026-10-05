@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Add a Wsh feature in a small, testable vertical slice.
+Add a Wisp feature in a small, testable vertical slice.
 
 ## When to use
 

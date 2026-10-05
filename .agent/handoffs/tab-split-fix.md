@@ -2,7 +2,7 @@
 
 ## Task
 
-WSH crashes or behaves incorrectly when pressing `Tab` inside split terminal mode.
+WISP crashes or behaves incorrectly when pressing `Tab` inside split terminal mode.
 
 ## Summary
 
@@ -15,12 +15,12 @@ Fix: Added `case INPUT_NEXT_TAB` and `case INPUT_PREV_TAB` handlers to the WM_KE
 ## Files changed
 
 - `src/main.cpp` — Added INPUT_NEXT_TAB and INPUT_PREV_TAB cases to WM_KEYDOWN switch (lines ~1127-1132)
-- `.agent/memory/known-issues.md` — Added WSH-KI-005 entry
+- `.agent/memory/known-issues.md` — Added WISP-KI-005 entry
 
 ## Commands run
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wsh.ps1 -NoRun -RunTests
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wisp.ps1 -NoRun -RunTests
 ```
 
 ## Verification result
@@ -32,8 +32,8 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wsh.ps1 -NoRun -Ru
 ## Manual QA
 
 Recommended manual verification steps:
-1. Build Wsh: `pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wsh.ps1 -NoRun`
-2. Run Wsh: `.\build-run\dist\Wsh.exe`
+1. Build Wisp: `pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wisp.ps1 -NoRun`
+2. Run Wisp: `.\build-run\dist\Wisp.exe`
 3. Open multiple tabs (Ctrl+Shift+T)
 4. Press Ctrl+Tab — should cycle to next tab
 5. Press Ctrl+Shift+Tab — should cycle to previous tab
@@ -53,7 +53,7 @@ Recommended manual verification steps:
 
 ## Open questions
 
-- The user reported "Tab crashes" specifically. The fix addresses the unhandled INPUT_NEXT_TAB/INPUT_PREV_TAB actions. If the crash is in a different code path (e.g., repl_handle_input -> handle_tab -> completion_compute), that would require additional investigation with runtime logs from `%LOCALAPPDATA%\Wsh\logs\wsh.log`.
+- The user reported "Tab crashes" specifically. The fix addresses the unhandled INPUT_NEXT_TAB/INPUT_PREV_TAB actions. If the crash is in a different code path (e.g., repl_handle_input -> handle_tab -> completion_compute), that would require additional investigation with runtime logs from `%LOCALAPPDATA%\Wisp\logs\wisp.log`.
 - There is a potential thread-safety concern in `completion_compute()` which reads `ctx->env`, `ctx->aliases`, and `ctx->functions` without holding `g_lock` while the REPL execution thread may modify these. This is a separate issue.
 
 ## Recommended next skill

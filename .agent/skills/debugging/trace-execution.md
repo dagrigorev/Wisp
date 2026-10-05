@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Follow Wsh control flow through a small path.
+Follow Wisp control flow through a small path.
 
 ## When to use
 

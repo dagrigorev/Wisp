@@ -13,7 +13,7 @@ The failure happens when a C translation unit includes MSVC's STL-backed `<stdbo
 
 ## Fix
 
-WSH now uses `src/core/wsh_bool.h` instead of including `<stdbool.h>` directly.
+WISP now uses `src/core/wisp_bool.h` instead of including `<stdbool.h>` directly.
 
 For MSVC C compilation it defines a small C-compatible `bool`/`true`/`false` shim. For C++ it uses native `bool`. For non-MSVC C compilers it delegates to the standard `<stdbool.h>`.
 

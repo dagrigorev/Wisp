@@ -31,7 +31,7 @@ Use this map when the task affects module boundaries, compatibility, public comm
 
 - [Document Decision](../skills/architecture/document-decision.md)
 
-## Wsh boundary reminders
+## Wisp boundary reminders
 
 - Shell semantics stay in `src/shell`.
 - Terminal/screen/rendering stays in `src/terminal`.

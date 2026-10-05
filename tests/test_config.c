@@ -21,11 +21,11 @@ TEST(Config, ParsesHexColors) {
 TEST(Config, LoadsTomlOverrides) {
     char path[MAX_PATH];
     GetTempPathA(MAX_PATH, path);
-    strcat(path, "wsh_test_config.toml");
+    strcat(path, "wisp_test_config.toml");
 
     write_text_file(path,
         "[general]\n"
-        "shell = \"pwsh.exe\"\n"
+        "shell = \"pwisp.exe\"\n"
         "scrollback = 1234\n"
         "confirm_exit = false\n"
         "default_cwd = \"C:\\\\work\"\n"
@@ -53,7 +53,7 @@ TEST(Config, LoadsTomlOverrides) {
     Config cfg;
     config_defaults(&cfg);
     ASSERT_TRUE(config_load(&cfg, path));
-    ASSERT_STR_EQ(cfg.general.shell, "pwsh.exe");
+    ASSERT_STR_EQ(cfg.general.shell, "pwisp.exe");
     ASSERT_EQ(cfg.general.scrollback, 1234);
     ASSERT_FALSE(cfg.general.confirm_exit);
     ASSERT_STR_EQ(cfg.general.default_cwd, "C:\\work");

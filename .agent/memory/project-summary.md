@@ -2,7 +2,7 @@
 
 ## What this project is
 
-Wsh is a Windows-first shell and terminal environment written in C/C++ with CMake.
+Wisp is a Windows-first shell and terminal environment written in C/C++ with CMake.
 
 It combines a native Win32 window, Direct2D/DirectWrite terminal rendering, an internal shell runtime, split panes, VT/ANSI screen handling, scrollback, themes, manual pages, companion Unix-like utilities, and optional external shell hosting through ConPTY.
 
@@ -22,13 +22,13 @@ The project is not a complete Zsh clone. Treat Zsh compatibility as an increment
 ## Main entry points
 
 - `CMakeLists.txt` — root build configuration.
-- `src/CMakeLists.txt` — `Wsh.exe` target.
+- `src/CMakeLists.txt` — `Wisp.exe` target.
 - `src/main.cpp` — application startup and wiring.
 - `src/window.cpp` / `src/window.h` — Win32 window/UI message handling.
 - `src/repl.c` / `src/repl.h` — REPL bridge and line editing.
 - `tools/CMakeLists.txt` — companion utilities.
 - `tests/CMakeLists.txt` — CTest entrypoints.
-- `build-and-run-wsh.ps1` — main local build/run/test script.
+- `build-and-run-wisp.ps1` — main local build/run/test script.
 
 ## Main modules
 

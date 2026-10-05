@@ -1,4 +1,4 @@
-# Wsh Local Agent System
+# Wisp Local Agent System
 
 This directory is a small navigation system for Open Code agents working with local Ollama models.
 
@@ -13,9 +13,9 @@ It is intentionally split into small linked files so an agent can move through t
 5. Use [Task Template](TASK_TEMPLATE.md)
 6. Finish with [Handoff Template](HANDOFF_TEMPLATE.md)
 
-## Wsh focus
+## Wisp focus
 
-Wsh is a Windows-first terminal and shell project. Most work falls into one of these paths:
+Wisp is a Windows-first terminal and shell project. Most work falls into one of these paths:
 
 - build failure: [Build Map](maps/build.md)
 - runtime bug or crash: [Debugging Map](maps/debugging.md)
@@ -38,7 +38,7 @@ Use the editable memory files first:
 
 Do not scan all of `src/`, `tools/`, `tests/`, and `docs/` at once.
 
-For Wsh tasks, identify the subsystem first:
+For Wisp tasks, identify the subsystem first:
 
 - `src/core` for common memory/string/log/path helpers
 - `src/shell` for lexer/parser/executor/builtins/history/jobs/completion

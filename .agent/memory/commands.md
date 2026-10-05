@@ -15,13 +15,13 @@ Initialize user runtime files after building:
 Preferred local workflow:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wsh.ps1 -NoRun
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wisp.ps1 -NoRun
 ```
 
 Build and test in one step:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wsh.ps1 -NoRun -RunTests
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wisp.ps1 -NoRun -RunTests
 ```
 
 Manual CMake flow:
@@ -36,7 +36,7 @@ cmake --build build --config Release
 Preferred:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wsh.ps1 -NoRun -RunTests
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-and-run-wisp.ps1 -NoRun -RunTests
 ```
 
 Manual:
@@ -70,7 +70,7 @@ Useful test names include:
 After build:
 
 ```powershell
-.\build-run\dist\Wsh.exe
+.\build-run\dist\Wisp.exe
 ```
 
 Manual CMake output may also place runtime files under the configured `dist` directory inside the build tree.
@@ -80,13 +80,13 @@ Manual CMake output may also place runtime files under the configured `dist` dir
 Runtime log path:
 
 ```text
-%LOCALAPPDATA%\Wsh\logs\wsh.log
+%LOCALAPPDATA%\Wisp\logs\wisp.log
 ```
 
 Fallback log path if `LOCALAPPDATA` is unavailable:
 
 ```text
-logs\wsh.log
+logs\wisp.log
 ```
 
 ## Package
@@ -109,7 +109,7 @@ Remove-Item -Recurse -Force .\build -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force .\build-run -ErrorAction SilentlyContinue
 ```
 
-Do not delete user data under `%APPDATA%\Wsh` or `%LOCALAPPDATA%\Wsh` unless the task explicitly asks for a clean user-runtime test.
+Do not delete user data under `%APPDATA%\Wisp` or `%LOCALAPPDATA%\Wisp` unless the task explicitly asks for a clean user-runtime test.
 
 ## Related
 

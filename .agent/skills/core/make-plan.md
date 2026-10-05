@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Create a short, verifiable plan before changing Wsh files.
+Create a short, verifiable plan before changing Wisp files.
 
 ## When to use
 

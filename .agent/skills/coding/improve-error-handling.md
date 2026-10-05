@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Make Wsh failures explicit and diagnosable without hiding real errors.
+Make Wisp failures explicit and diagnosable without hiding real errors.
 
 ## When to use
 

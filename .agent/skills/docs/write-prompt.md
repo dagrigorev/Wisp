@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Create or update reusable Open Code prompts for Wsh work.
+Create or update reusable Open Code prompts for Wisp work.
 
 ## When to use
 
@@ -24,7 +24,7 @@ Use when agent workflow should be reusable.
 
 1. State role and task type.
 2. Reference router, maps, skills, memory.
-3. Include Wsh constraints.
+3. Include Wisp constraints.
 4. Keep prompt short and reusable.
 5. Avoid embedding large code or docs.
 

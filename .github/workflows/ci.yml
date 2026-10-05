@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+      - "feature/**"
+      - "bugfix/**"
+      - "chore/**"
+  pull_request:
+    branches:
+      - master
+      - develop
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test (${{ matrix.configuration }})
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Same entry point the release workflow uses, so CI and release cannot
+      # drift apart. Phi-4 (WISP_ENABLE_PHI4) stays OFF, so no llama.cpp fetch
+      # and no multi-GB model download.
+      - name: Build and test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          ./build-and-run-wisp.ps1 `
+            -Configuration ${{ matrix.configuration }} `
+            -BuildDir build-ci `
+            -NoRun `
+            -RunTests
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-logs-${{ matrix.configuration }}
+          path: build-ci/Testing/**
+          if-no-files-found: ignore
+          retention-days: 7

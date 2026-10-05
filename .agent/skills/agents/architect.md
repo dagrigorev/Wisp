@@ -2,7 +2,7 @@
 
 ## Mission
 
-Design small Wsh changes that respect module boundaries.
+Design small Wisp changes that respect module boundaries.
 
 ## Start here
 

@@ -1,12 +1,12 @@
 #pragma once
-#ifndef WSH_FONT_H
-#define WSH_FONT_H
+#ifndef WISP_FONT_H
+#define WISP_FONT_H
 
 /* font.h — DirectWrite font enumeration and glyph metrics */
 
 #include <windows.h>
 #include <dwrite.h>
-#include "wsh_bool.h"
+#include "wisp_bool.h"
 
 
 #ifdef __cplusplus
@@ -40,4 +40,4 @@ void font_free(FontState *fs);
 }
 #endif
 
-#endif /* WSH_FONT_H */
+#endif /* WISP_FONT_H */

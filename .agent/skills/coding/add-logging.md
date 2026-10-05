@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Add targeted diagnostics for Wsh runtime investigation.
+Add targeted diagnostics for Wisp runtime investigation.
 
 ## When to use
 
@@ -26,7 +26,7 @@ Use when logs are insufficient to diagnose crashes, ConPTY, input, renderer, or 
 2. Add logs at boundary/failure points only.
 3. Avoid logging secrets or huge buffers.
 4. Include enough context to connect events.
-5. Verify logs appear in `%LOCALAPPDATA%\Wsh\logs\wsh.log`.
+5. Verify logs appear in `%LOCALAPPDATA%\Wisp\logs\wisp.log`.
 
 ## Output
 

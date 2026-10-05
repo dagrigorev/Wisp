@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Use Wsh logs and failing output to find the first meaningful failure.
+Use Wisp logs and failing output to find the first meaningful failure.
 
 ## When to use
 

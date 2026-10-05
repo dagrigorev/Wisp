@@ -63,7 +63,7 @@ Links:
 ### UI must use real data
 
 Context:
-The README states that tabs, path bars, status badges, resource meters, and utility output should use active Wsh/session/system state.
+The README states that tabs, path bars, status badges, resource meters, and utility output should use active Wisp/session/system state.
 
 Decision:
 Do not add dummy/fake values to UI or terminal status surfaces.

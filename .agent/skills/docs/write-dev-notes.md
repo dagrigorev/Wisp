@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Capture technical notes for future Wsh agents/developers.
+Capture technical notes for future Wisp agents/developers.
 
 ## When to use
 

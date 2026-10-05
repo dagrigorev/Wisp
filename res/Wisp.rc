@@ -1,0 +1,40 @@
+#include <windows.h>
+
+/* ── Application Icon ─────────────────────────────────────────────────────── */
+1 ICON "wisp.ico"
+
+/* ── Version Information ──────────────────────────────────────────────────── */
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     1,0,0,0
+PRODUCTVERSION  1,0,0,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "Wisp Project\0"
+            VALUE "FileDescription",  "Wisp Terminal Emulator\0"
+            VALUE "FileVersion",      "1.0.0.0\0"
+            VALUE "InternalName",     "Wisp\0"
+            VALUE "LegalCopyright",   "MIT License\0"
+            VALUE "OriginalFilename", "Wisp.exe\0"
+            VALUE "ProductName",      "Wisp\0"
+            VALUE "ProductVersion",   "1.0.0.0\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 0x04B0
+    END
+END
+
+/* ── DPI-aware Manifest ───────────────────────────────────────────────────── */
+#ifndef RT_MANIFEST
+#define RT_MANIFEST 24
+#endif
+1 RT_MANIFEST "Wisp.manifest"

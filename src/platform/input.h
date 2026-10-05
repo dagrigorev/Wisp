@@ -1,9 +1,9 @@
 #pragma once
-#ifndef WSH_INPUT_H
-#define WSH_INPUT_H
+#ifndef WISP_INPUT_H
+#define WISP_INPUT_H
 
 #include <windows.h>
-#include "wsh_bool.h"
+#include "wisp_bool.h"
 
 
 #ifdef __cplusplus
@@ -52,4 +52,4 @@ bool input_suppress_char(WPARAM vk, LPARAM lParam);
 }
 #endif
 
-#endif /* WSH_INPUT_H */
+#endif /* WISP_INPUT_H */

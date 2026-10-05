@@ -1,19 +1,21 @@
 # ── Unit tests ────────────────────────────────────────────────────────────────
 # Each test is a standalone console executable that returns 0 on pass.
 
-function(add_wsh_test name src)
-    add_executable(${name} ${src} test_helpers.c man_viewer_stub.c)
+function(add_wisp_test name src)
+    add_executable(${name} ${src} test_helpers.c)
     # Force C++ for both source and helpers so the auto-registration struct trick works.
     # set_source_files_properties + LANGUAGE CXX is the correct way for VS generator;
     # target_compile_options(/TP) is silently dropped by the VS project generator.
     set_source_files_properties(${src} test_helpers.c PROPERTIES LANGUAGE CXX)
     target_include_directories(${name} PRIVATE
         ${CMAKE_SOURCE_DIR}/src/core
-        ${CMAKE_SOURCE_DIR}/src/shell
         ${CMAKE_SOURCE_DIR}/src/platform
         ${CMAKE_SOURCE_DIR}/src/terminal
     )
-    target_link_libraries(${name} PRIVATE wsh_core wsh_shell wsh_platform wsh_terminal)
+    target_link_libraries(${name} PRIVATE wisp_core wisp_platform wisp_terminal)
+    # Ghostty's builtin.is_test and build_options.slow_runtime_safety, which
+    # upstream's tests run with; src/vt reads these.
+    target_compile_definitions(${name} PRIVATE WISP_IS_TEST=1 WISP_SLOW_RUNTIME_SAFETY=1)
     if(MSVC)
         # Console subsystem — tests use main(), not WinMain
         set_target_properties(${name} PROPERTIES
@@ -22,112 +24,64 @@ function(add_wsh_test name src)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
-add_wsh_test(test_arena        test_arena.c)
-add_wsh_test(test_str_util     test_str_util.c)
-add_wsh_test(test_lexer        test_lexer.c)
-add_wsh_test(test_parser       test_parser.c)
-add_wsh_test(test_expand       test_expand.c)
-add_wsh_test(test_builtins     test_builtins.c)
-add_wsh_test(test_history      test_history.c)
-
-add_wsh_test(test_prompt       test_prompt.c)
-
-add_wsh_test(test_config       test_config.c)
-add_wsh_test(test_scheduler    test_scheduler.c)
-add_wsh_test(test_completion   test_completion.c)
-add_wsh_test(test_executor     test_executor.c)
-add_wsh_test(test_screen       test_screen.c)
-add_wsh_test(test_vt_parser    test_vt_parser.c)
-add_wsh_test(test_layout       test_layout.c)
-
-add_executable(test_repl test_repl.c test_helpers.c man_viewer_stub.c ${CMAKE_SOURCE_DIR}/src/repl.c)
-set_source_files_properties(test_repl.c test_helpers.c PROPERTIES LANGUAGE CXX)
-# Scope repl.c LANGUAGE CXX to this target only (TARGET_DIRECTORY, CMake 3.18+)
-# so the main wsh_shell library still compiles repl.c as C.
-set_source_files_properties(${CMAKE_SOURCE_DIR}/src/repl.c
-    TARGET_DIRECTORY test_repl PROPERTIES LANGUAGE CXX)
-target_include_directories(test_repl PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/src/core
-    ${CMAKE_SOURCE_DIR}/src/shell
-    ${CMAKE_SOURCE_DIR}/src/platform
-    ${CMAKE_SOURCE_DIR}/src/terminal
-)
-target_link_libraries(test_repl PRIVATE wsh_core wsh_shell wsh_platform wsh_terminal)
-if(MSVC)
-    set_target_properties(test_repl PROPERTIES LINK_FLAGS "/SUBSYSTEM:CONSOLE /MANIFEST:NO")
-endif()
-add_test(NAME test_repl COMMAND test_repl)
-
-# Companion utility smoke tests: every utility must expose a stable help surface.
-function(add_wsh_tool_help_test tool)
-    add_test(NAME test_tool_${tool}_help COMMAND ${tool} --help)
-endfunction()
-add_wsh_tool_help_test(ls)
-add_wsh_tool_help_test(md)
-add_wsh_tool_help_test(tree)
-add_wsh_tool_help_test(ping)
-add_wsh_tool_help_test(htop)
-add_wsh_tool_help_test(wshinit)
-add_wsh_tool_help_test(cat)
-add_wsh_tool_help_test(pwd)
-add_wsh_tool_help_test(cp)
-add_wsh_tool_help_test(mv)
-add_wsh_tool_help_test(rm)
-add_wsh_tool_help_test(mkdir)
-add_wsh_tool_help_test(rmdir)
-add_wsh_tool_help_test(touch)
-add_wsh_tool_help_test(head)
-add_wsh_tool_help_test(tail)
-add_wsh_tool_help_test(wc)
-add_wsh_tool_help_test(grep)
-add_wsh_tool_help_test(sort)
-add_wsh_tool_help_test(uniq)
-add_wsh_tool_help_test(basename)
-add_wsh_tool_help_test(dirname)
-add_wsh_tool_help_test(whoami)
-add_wsh_tool_help_test(hostname)
-add_wsh_tool_help_test(uname)
-add_wsh_tool_help_test(date)
-add_wsh_tool_help_test(clear)
-add_wsh_tool_help_test(which)
-add_wsh_tool_help_test(sleep)
-add_wsh_tool_help_test(yes)
-add_wsh_tool_help_test(true)
-add_wsh_tool_help_test(false)
-add_wsh_tool_help_test(echo)
-add_wsh_tool_help_test(env)
-add_wsh_tool_help_test(printenv)
-add_wsh_tool_help_test(more)
-add_wsh_tool_help_test(less)
-add_wsh_tool_help_test(find)
-add_wsh_tool_help_test(tee)
-add_wsh_tool_help_test(cut)
-
-add_test(NAME test_tool_pwd_runs COMMAND pwd)
-add_test(NAME test_tool_tree_runs COMMAND tree ${CMAKE_SOURCE_DIR}/tools -L 1)
-set_tests_properties(test_tool_tree_runs PROPERTIES
-    PASS_REGULAR_EXPRESSION "tree\\.cpp")
-add_test(NAME test_tool_true_runs COMMAND true)
-add_test(NAME test_tool_false_runs COMMAND false)
-set_tests_properties(test_tool_false_runs PROPERTIES WILL_FAIL TRUE)
-
-# ── AI tests ──────────────────────────────────────────────────────────────────
-add_executable(test_ai test_ai.cpp test_helpers.c man_viewer_stub.c)
-set_source_files_properties(test_helpers.c PROPERTIES LANGUAGE CXX)  # test_ai.cpp is already C++
-target_include_directories(test_ai PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/src/core
-    ${CMAKE_SOURCE_DIR}/src/shell
-    ${CMAKE_SOURCE_DIR}/src/ai
-    ${CMAKE_SOURCE_DIR}/src/terminal
-    ${CMAKE_SOURCE_DIR}/src/platform
-)
-target_link_libraries(test_ai PRIVATE wsh_ai wsh_core wsh_shell wsh_platform wsh_terminal)
-if(MSVC)
-    set_target_properties(test_ai PROPERTIES
-        LINK_FLAGS "/SUBSYSTEM:CONSOLE /MANIFEST:NO")
-endif()
-add_test(NAME test_ai COMMAND test_ai)
-
-
+add_wisp_test(test_arena      test_arena.c)
+add_wisp_test(test_str_util   test_str_util.c)
+add_wisp_test(test_config     test_config.c)
+add_wisp_test(test_vt_pane    test_vt_pane.cpp)
+add_wisp_test(test_layout     test_layout.c)
+add_wisp_test(test_size      test_size.cpp)
+add_wisp_test(test_bitmap_allocator test_bitmap_allocator.cpp)
+add_wisp_test(test_color     test_color.cpp)
+add_wisp_test(test_sgr       test_sgr.cpp)
+add_wisp_test(test_ref_counted_set test_ref_counted_set.cpp)
+add_wisp_test(test_hash_map   test_hash_map.cpp)
+add_wisp_test(test_style     test_style.cpp)
+add_wisp_test(test_page      test_page.cpp)
+add_wisp_test(test_page_struct test_page_struct.cpp)
+add_wisp_test(test_style_table test_style_table.cpp)
+add_wisp_test(test_hyperlink test_hyperlink.cpp)
+add_wisp_test(test_page_grapheme test_page_grapheme.cpp)
+add_wisp_test(test_page_clone test_page_clone.cpp)
+add_wisp_test(test_page_reflow test_page_reflow.cpp)
+add_wisp_test(test_page_scroll test_page_scroll.cpp)
+add_wisp_test(test_page_list test_page_list.cpp)
+add_wisp_test(test_screen_port test_screen_port.cpp)
+add_wisp_test(test_terminal_port test_terminal_port.cpp)
+add_wisp_test(test_parser_port test_parser_port.cpp)
+add_wisp_test(test_osc_port test_osc_port.cpp)
+add_wisp_test(test_osc_color_port test_osc_color_port.cpp)
+add_wisp_test(test_string_encoding test_string_encoding.cpp)
+add_wisp_test(test_charsets_utf8_port test_charsets_utf8_port.cpp)
+add_wisp_test(test_vt_leaves_port test_vt_leaves_port.cpp)
+add_wisp_test(test_modes_port test_modes_port.cpp)
+add_wisp_test(test_simd_vt_port test_simd_vt_port.cpp)
+add_wisp_test(test_vt_stream_port test_vt_stream_port.cpp)
+add_wisp_test(test_vt_size_port test_vt_size_port.cpp)
+add_wisp_test(test_vt_bitmap_allocator_port test_vt_bitmap_allocator_port.cpp)
+add_wisp_test(test_zigstd_port test_zigstd_port.cpp)
+add_wisp_test(test_vt_hash_map_port test_vt_hash_map_port.cpp)
+add_wisp_test(test_vt_ref_counted_set_port test_vt_ref_counted_set_port.cpp)
+add_wisp_test(test_vt_style_port test_vt_style_port.cpp)
+add_wisp_test(test_vt_page_port test_vt_page_port.cpp)
+add_wisp_test(test_vt_pagelist_deps_port test_vt_pagelist_deps_port.cpp)
+add_wisp_test(test_untouched_pool_port test_untouched_pool_port.cpp)
+add_wisp_test(test_vt_page_list_port test_vt_page_list_port.cpp)
+add_wisp_test(test_vt_screen_port test_vt_screen_port.cpp)
+add_wisp_test(test_vt_selection_port test_vt_selection_port.cpp)
+add_wisp_test(test_vt_tabstops_port test_vt_tabstops_port.cpp)
+add_wisp_test(test_vt_screen_set_port test_vt_screen_set_port.cpp)
+add_wisp_test(test_vt_unicode_port test_vt_unicode_port.cpp)
+add_wisp_test(test_vt_terminal_port test_vt_terminal_port.cpp)
+add_wisp_test(test_segmented_list test_segmented_list.cpp)
+add_wisp_test(test_stream_port test_stream_port.cpp)
+add_wisp_test(test_stream_terminal_deps_port test_stream_terminal_deps_port.cpp)
+add_wisp_test(test_kitty_clipboard_port test_kitty_clipboard_port.cpp)
+add_wisp_test(test_simd_base64_port test_simd_base64_port.cpp)
+add_wisp_test(test_kitty_dnd_port test_kitty_dnd_port.cpp)
+add_wisp_test(test_dcs_port test_dcs_port.cpp)
+add_wisp_test(test_apc_port test_apc_port.cpp)
+add_wisp_test(test_terminfo_port test_terminfo_port.cpp)
+add_wisp_test(test_input_paste_port test_input_paste_port.cpp)
+add_wisp_test(test_stream_terminal_port test_stream_terminal_port.cpp)
+add_wisp_test(test_formatter_port test_formatter_port.cpp)
+add_wisp_test(test_stream_continuation_port test_stream_continuation_port.cpp)

@@ -1,6 +1,6 @@
 # Decisions Index
 
-Use this index for durable Wsh architecture and workflow decisions.
+Use this index for durable Wisp architecture and workflow decisions.
 
 ## Current sources
 

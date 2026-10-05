@@ -1,4 +1,4 @@
-You are working locally in the Wsh repository through Open Code with local Ollama models.
+You are working locally in the Wisp repository through Open Code with local Ollama models.
 
 Use the local agent system:
 
@@ -24,4 +24,4 @@ Use `.agent/maps/release.md`.
 
 Verify build, tests, runtime bundle, package output, and release-visible notes.
 
-Confirm the bundle contains `Wsh.exe`, companion utilities, `config`, `themes`, and `man`.
+Confirm the bundle contains `Wisp.exe`, companion utilities, `config`, `themes`, and `man`.

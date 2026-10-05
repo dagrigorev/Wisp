@@ -4,10 +4,10 @@
 #include <string.h>
 #include <stdlib.h>
 
-void wsh_unicode_init_process(void) {
+void wisp_unicode_init_process(void) {
     /*
      * zsh derives multibyte behaviour from the locale.  On Windows we make the
-     * process contract explicit: UTF-8 inside WSH, UTF-16 at Win32 boundaries.
+     * process contract explicit: UTF-8 inside WISP, UTF-16 at Win32 boundaries.
      * Console CP changes are harmless for the GUI build and help console tests
      * or tools launched from a console.
      */
@@ -19,7 +19,7 @@ void wsh_unicode_init_process(void) {
     if (GetEnvironmentVariableW(L"LC_CTYPE", NULL, 0) == 0)
         SetEnvironmentVariableW(L"LC_CTYPE", L"C.UTF-8");
 
-    WSH_LOG_DEBUG("Unicode mode initialized: internal=UTF-8, win32=UTF-16, consoleCP=UTF-8");
+    WISP_LOG_DEBUG("Unicode mode initialized: internal=UTF-8, win32=UTF-16, consoleCP=UTF-8");
 }
 
 static bool decode_one(const unsigned char *s, int len, int *used, uint32_t *cp) {
@@ -50,7 +50,7 @@ static bool decode_one(const unsigned char *s, int len, int *used, uint32_t *cp)
     return true;
 }
 
-bool wsh_utf8_validate_n(const char *s, int len) {
+bool wisp_utf8_validate_n(const char *s, int len) {
     if (!s) return len == 0;
     if (len < 0) len = (int)strlen(s);
     int i = 0;
@@ -62,7 +62,7 @@ bool wsh_utf8_validate_n(const char *s, int len) {
     return true;
 }
 
-int wsh_utf8_next_offset(const char *s, int len, int offset) {
+int wisp_utf8_next_offset(const char *s, int len, int offset) {
     if (!s || len <= 0) return 0;
     if (offset < 0) offset = 0;
     if (offset >= len) return len;
@@ -71,7 +71,7 @@ int wsh_utf8_next_offset(const char *s, int len, int offset) {
     return offset + used;
 }
 
-int wsh_utf8_prev_offset(const char *s, int offset) {
+int wisp_utf8_prev_offset(const char *s, int offset) {
     if (!s || offset <= 0) return 0;
     int p = offset - 1;
     while (p > 0 && (((unsigned char)s[p] & 0xC0) == 0x80)) p--;
@@ -80,7 +80,7 @@ int wsh_utf8_prev_offset(const char *s, int offset) {
 
 static bool in_range(uint32_t cp, uint32_t a, uint32_t b) { return cp >= a && cp <= b; }
 
-int wsh_utf8_codepoint_width(uint32_t cp) {
+int wisp_utf8_codepoint_width(uint32_t cp) {
     if (cp == 0) return 0;
     if (cp < 0x20 || (cp >= 0x7F && cp < 0xA0)) return 0;
 
@@ -99,7 +99,7 @@ int wsh_utf8_codepoint_width(uint32_t cp) {
     return 1;
 }
 
-int wsh_utf8_display_width_n(const char *s, int len) {
+int wisp_utf8_display_width_n(const char *s, int len) {
     if (!s) return 0;
     if (len < 0) len = (int)strlen(s);
     int width = 0;
@@ -111,17 +111,17 @@ int wsh_utf8_display_width_n(const char *s, int len) {
             i += 1;
             continue;
         }
-        width += wsh_utf8_codepoint_width(cp);
+        width += wisp_utf8_codepoint_width(cp);
         i += used;
     }
     return width;
 }
 
-int wsh_utf8_display_width(const char *s) {
-    return s ? wsh_utf8_display_width_n(s, (int)strlen(s)) : 0;
+int wisp_utf8_display_width(const char *s) {
+    return s ? wisp_utf8_display_width_n(s, (int)strlen(s)) : 0;
 }
 
-int wsh_utf8_display_width_skip_ansi(const char *s, int len) {
+int wisp_utf8_display_width_skip_ansi(const char *s, int len) {
     if (!s) return 0;
     if (len < 0) len = (int)strlen(s);
     int width = 0;
@@ -153,7 +153,7 @@ int wsh_utf8_display_width_skip_ansi(const char *s, int len) {
             i += 1;
             continue;
         }
-        width += wsh_utf8_codepoint_width(cp);
+        width += wisp_utf8_codepoint_width(cp);
         i += used;
     }
     return width;
@@ -184,10 +184,10 @@ static char *bytes_to_utf8_codepage(UINT cp, const char *bytes, int len, int *ou
     return out;
 }
 
-char *wsh_bytes_to_utf8_for_terminal(const char *bytes, int len, int *out_len) {
+char *wisp_bytes_to_utf8_for_terminal(const char *bytes, int len, int *out_len) {
     if (!bytes) return str_dup("");
     if (len < 0) len = (int)strlen(bytes);
-    if (wsh_utf8_validate_n(bytes, len)) {
+    if (wisp_utf8_validate_n(bytes, len)) {
         char *copy = str_ndup(bytes, (size_t)len);
         if (out_len) *out_len = len;
         return copy;
@@ -195,7 +195,7 @@ char *wsh_bytes_to_utf8_for_terminal(const char *bytes, int len, int *out_len) {
 
     /* Windows console programs commonly write OEM bytes (CP866 for ru-RU). */
     char *oem = bytes_to_utf8_codepage(GetOEMCP(), bytes, len, out_len);
-    if (oem && wsh_utf8_validate_n(oem, out_len ? *out_len : -1)) return oem;
+    if (oem && wisp_utf8_validate_n(oem, out_len ? *out_len : -1)) return oem;
     str_free(oem);
 
     char *acp = bytes_to_utf8_codepage(GetACP(), bytes, len, out_len);
@@ -206,11 +206,11 @@ char *wsh_bytes_to_utf8_for_terminal(const char *bytes, int len, int *out_len) {
     return str_ndup(bytes, (size_t)len);
 }
 
-char *wsh_utf16_to_utf8_clipboard(const wchar_t *w, int *out_len) {
+char *wisp_utf16_to_utf8_clipboard(const wchar_t *w, int *out_len) {
     return u16_to_u8(w, out_len);
 }
 
-wchar_t *wsh_utf8_to_utf16_clipboard(const char *s, int len, int *out_wchars) {
+wchar_t *wisp_utf8_to_utf16_clipboard(const char *s, int len, int *out_wchars) {
     if (!s) return NULL;
     if (len < 0) return u8_to_u16(s, out_wchars);
     char *tmp = str_ndup(s, (size_t)len);

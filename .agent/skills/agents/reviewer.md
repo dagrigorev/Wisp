@@ -2,7 +2,7 @@
 
 ## Mission
 
-Review Wsh changes for correctness, boundaries, and verification.
+Review Wisp changes for correctness, boundaries, and verification.
 
 ## Start here
 

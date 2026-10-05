@@ -20,7 +20,7 @@ Use this map when preparing a runnable bundle, ZIP package, release notes, or pr
 ### Need runtime bundle verification
 
 - [Package Artifacts](../skills/build/package-artifacts.md)
-- Confirm `Wsh.exe`, companion utilities, `config`, `themes`, and `man` exist in `dist`.
+- Confirm `Wisp.exe`, companion utilities, `config`, `themes`, and `man` exist in `dist`.
 
 ### Need release notes
 

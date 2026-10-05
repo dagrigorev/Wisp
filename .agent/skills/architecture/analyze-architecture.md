@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Understand Wsh subsystem boundaries before design or refactoring.
+Understand Wisp subsystem boundaries before design or refactoring.
 
 ## When to use
 

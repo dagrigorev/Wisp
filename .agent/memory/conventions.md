@@ -10,7 +10,7 @@
 
 ## Naming
 
-- Follow existing `wsh_*` naming patterns in C modules.
+- Follow existing `wisp_*` naming patterns in C modules.
 - Keep module names aligned with their folder responsibility: `core`, `shell`, `terminal`, `platform`.
 - Utility commands should match their executable name and manual page where applicable.
 

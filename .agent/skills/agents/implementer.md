@@ -2,7 +2,7 @@
 
 ## Mission
 
-Apply small, verified Wsh code changes.
+Apply small, verified Wisp code changes.
 
 ## Start here
 

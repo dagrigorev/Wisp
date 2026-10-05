@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Ensure a Wsh change stays in the correct subsystem.
+Ensure a Wisp change stays in the correct subsystem.
 
 ## When to use
 

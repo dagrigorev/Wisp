@@ -47,11 +47,11 @@ bool pty_create(PtySession *pty, int cols, int rows) {
     HANDLE pipe_write_to_us = INVALID_HANDLE_VALUE;
 
     if (!CreatePipe(&pipe_read_from_us, &pipe_write_to_child, NULL, 0)) {
-        wsh_log_win32("CreatePipe (stdin)");
+        wisp_log_win32("CreatePipe (stdin)");
         return false;
     }
     if (!CreatePipe(&pipe_read_from_child, &pipe_write_to_us, NULL, 0)) {
-        wsh_log_win32("CreatePipe (stdout)");
+        wisp_log_win32("CreatePipe (stdout)");
         CloseHandle(pipe_read_from_us);
         CloseHandle(pipe_write_to_child);
         return false;
@@ -60,7 +60,7 @@ bool pty_create(PtySession *pty, int cols, int rows) {
     COORD size = { (SHORT)cols, (SHORT)rows };
     HRESULT hr = CreatePseudoConsole(size, pipe_read_from_us, pipe_write_to_us, 0, &pty->hpcon);
     if (FAILED(hr)) {
-        WSH_LOG_ERROR("CreatePseudoConsole failed: 0x%08X", hr);
+        WISP_LOG_ERROR("CreatePseudoConsole failed: 0x%08X", hr);
         CloseHandle(pipe_read_from_us);
         CloseHandle(pipe_write_to_child);
         CloseHandle(pipe_read_from_child);
@@ -93,7 +93,7 @@ bool pty_spawn(PtySession *pty, const wchar_t *cmdline, const wchar_t *cwd,
     if (!attr_list) return false;
 
     if (!InitializeProcThreadAttributeList(attr_list, 1, 0, &attr_size)) {
-        wsh_log_win32("InitializeProcThreadAttributeList");
+        wisp_log_win32("InitializeProcThreadAttributeList");
         HeapFree(GetProcessHeap(), 0, attr_list);
         return false;
     }
@@ -101,7 +101,7 @@ bool pty_spawn(PtySession *pty, const wchar_t *cmdline, const wchar_t *cwd,
     if (!UpdateProcThreadAttribute(attr_list, 0,
             PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, pty->hpcon,
             sizeof(pty->hpcon), NULL, NULL)) {
-        wsh_log_win32("UpdateProcThreadAttribute");
+        wisp_log_win32("UpdateProcThreadAttribute");
         DeleteProcThreadAttributeList(attr_list);
         HeapFree(GetProcessHeap(), 0, attr_list);
         return false;
@@ -126,7 +126,7 @@ bool pty_spawn(PtySession *pty, const wchar_t *cmdline, const wchar_t *cwd,
     HeapFree(GetProcessHeap(), 0, attr_list);
 
     if (!ok) {
-        wsh_log_win32("CreateProcessW");
+        wisp_log_win32("CreateProcessW");
         return false;
     }
 
@@ -143,12 +143,12 @@ bool pty_spawn(PtySession *pty, const wchar_t *cmdline, const wchar_t *cwd,
 
     pty->hthread_reader = CreateThread(NULL, 0, pty_reader_thread, ctx, 0, NULL);
     if (!pty->hthread_reader) {
-        wsh_log_win32("CreateThread (reader)");
+        wisp_log_win32("CreateThread (reader)");
         HeapFree(GetProcessHeap(), 0, ctx);
         return false;
     }
 
-    WSH_LOG_INFO("Spawned PID %lu: %ls", pty->pid, cmdline);
+    WISP_LOG_INFO("Spawned PID %lu: %ls", pty->pid, cmdline);
     return true;
 }
 
@@ -161,7 +161,7 @@ void pty_resize(PtySession *pty, int cols, int rows) {
     pty->rows = rows;
     COORD size = { (SHORT)cols, (SHORT)rows };
     HRESULT hr = ResizePseudoConsole(pty->hpcon, size);
-    if (FAILED(hr)) WSH_LOG_ERROR("ResizePseudoConsole failed: 0x%08X", hr);
+    if (FAILED(hr)) WISP_LOG_ERROR("ResizePseudoConsole failed: 0x%08X", hr);
 }
 
 /* ─── pty_write ──────────────────────────────────────────────────────────── */
@@ -170,7 +170,7 @@ int pty_write(PtySession *pty, const char *buf, int len) {
     if (!pty->alive || !buf || len <= 0) return -1;
     DWORD written = 0;
     if (!WriteFile(pty->hpipe_in, buf, (DWORD)len, &written, NULL)) {
-        wsh_log_win32("WriteFile (pty_write)");
+        wisp_log_win32("WriteFile (pty_write)");
         return -1;
     }
     return (int)written;

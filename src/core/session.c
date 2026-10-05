@@ -10,7 +10,7 @@ void session_path(char *out, int out_size) {
     if (!out || out_size <= 0) return;
     char appdata[MAX_PATH] = {0};
     GetEnvironmentVariableA("APPDATA", appdata, MAX_PATH);
-    _snprintf(out, out_size, "%s\\Wsh\\session.dat", appdata);
+    _snprintf(out, out_size, "%s\\Wisp\\session.dat", appdata);
 }
 
 bool session_exists(void) {
@@ -48,15 +48,15 @@ bool session_save_file(const void *data, size_t size) {
                            FILE_ATTRIBUTE_NORMAL, NULL);
     HeapFree(GetProcessHeap(), 0, wpath);
     if (h == INVALID_HANDLE_VALUE) {
-        WSH_LOG_ERROR("session_save: CreateFileW failed");
-        wsh_log_win32("CreateFileW");
+        WISP_LOG_ERROR("session_save: CreateFileW failed");
+        wisp_log_win32("CreateFileW");
         return false;
     }
 
     DWORD written = 0;
     bool ok = WriteFile(h, data, (DWORD)size, &written, NULL) && written == (DWORD)size;
     if (!ok) {
-        WSH_LOG_WARN("session_save: wrote %lu of %zu bytes", written, size);
+        WISP_LOG_WARN("session_save: wrote %lu of %zu bytes", written, size);
     }
     CloseHandle(h);
     return ok;
