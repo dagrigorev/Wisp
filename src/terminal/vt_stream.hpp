@@ -16,9 +16,10 @@
  *   - The optional `vtRaw` handler hook (used by Ghostty's inspector) is not
  *     carried over. Every handler here takes the fast paths, as a handler
  *     without vtRaw does upstream.
- *   - Continuation tracking (stream_continuation.zig) is not ported yet;
- *     `continuation` is always null, which is upstream's behavior when no
- *     continuation_max_bytes is given.
+ *   - Continuation tracking is `has_continuation` plus the tracker, since
+ *     the tracker owns an allocator and a list rather than being an
+ *     optional value. It stays off unless continuation_max_bytes is given,
+ *     which is upstream's behavior too.
  *   - log.* and logUnsupportedOnce have no sink yet and are comments.
  *   - SIMD paths are their scalar equivalents (see ../simd/vt.hpp).
  */
@@ -44,6 +45,7 @@
 #include "utf8_decoder.hpp"
 #include "../simd/vt.hpp"
 #include "../zigstd/unicode.hpp"
+#include "stream_continuation.hpp"
 
 namespace wisp {
 namespace terminal {
@@ -371,6 +373,11 @@ struct Stream {
     Parser parser;
     UTF8Decoder utf8decoder;
 
+    /* Wisp: `?Tracker` is the tracker plus a flag, since Tracker owns an
+     * allocator and a list rather than being an optional value. */
+    bool has_continuation;
+    stream_continuation::Tracker continuation;
+
     struct Options {
         /* Allocator to use. If this is not set then the stream
          * will be fully allocation free. There are some operations
@@ -380,7 +387,16 @@ struct Stream {
          * Wisp: ?Allocator is a flag. */
         bool allocator;
 
-        Options() : allocator(false) {}
+        /* Maximum size in bytes of the continuation suffix. If this is
+         * null or zero then continuation tracking is disabled. This is
+         * only applied when `allocator` is non-null; without an allocator
+         * continuation tracking is disabled. Feeding this continuation
+         * suffix into an equivalent stream at ground reconstructs the
+         * unfinished state without repeating committed terminal effects.
+         * Continuation tracking is only supported by TerminalStream. */
+        stream_continuation::Maybe<size_t> continuation_max_bytes; /* = null */
+
+        Options() : allocator(false), continuation_max_bytes() {}
     };
 
     /* Initialize a stream. Without an allocator, operations that require
@@ -396,17 +412,42 @@ struct Stream {
      * Wisp: Stream is not copyable (it holds the parser), so init is a
      * constructor that takes the handler by value. */
     explicit Stream(const Handler &h, Options options = Options())
-        : handler(h), parser(), utf8decoder() {
+        : handler(h), parser(), utf8decoder(), has_continuation(false), continuation() {
         // Initialize the parser
         if (options.allocator) parser.osc_parser.alloc = true;
+
+        // Initialize the continuation tracker if one is requested.
+        if (options.allocator && options.continuation_max_bytes.has &&
+            options.continuation_max_bytes.value > 0) {
+            continuation = stream_continuation::Tracker::init(zigstd::c_allocator(),
+                                                              options.continuation_max_bytes.value);
+            has_continuation = true;
+        }
     }
 
     Stream(const Stream &) = delete;
     Stream &operator=(const Stream &) = delete;
 
     void deinit() {
+        if (has_continuation) continuation.deinit();
         parser.osc_parser.deinit();
         handler.deinit();
+    }
+
+    /* Wisp: the error set of writeContinuation. */
+    enum class ContinuationError : uint8_t {
+        none,
+        ContinuationDisabled,
+        ContinuationUnavailable,
+    };
+
+    /* Write the current continuation suffix directly to a caller-owned
+     * writer. The caller must pause and serialize access to this Stream. */
+    ContinuationError writeContinuation(std::string *writer) const {
+        if (!has_continuation) return ContinuationError::ContinuationDisabled;
+        if (continuation.broken) return ContinuationError::ContinuationUnavailable;
+        continuation.write(writer);
+        return ContinuationError::none;
     }
 
     /* True when no continuation suffix is needed to reproduce the
@@ -417,9 +458,33 @@ struct Stream {
         return parser.state == PState::ground && utf8decoder.state == 0;
     }
 
+    /* Update the continuation suffix after one complete feed call.
+     * Must only be called when tracking is enabled. */
+    void trackContinuation(const uint8_t *input, size_t len) {
+        /* If we're in a ground state, we have no continuation suffix
+         * to track by definition. */
+        if (ground()) {
+            continuation.reset();
+            return;
+        }
+
+        /* Retain the part of this feed needed to replay the unfinished
+         * state. When the parser is grounded here, the feed must have
+         * ended inside a UTF-8 codepoint instead, because the ground
+         * check above covers both state machines. */
+        continuation.append(parser.state != PState::ground
+                                ? stream_continuation::Tracker::Pending::vt
+                                : stream_continuation::Tracker::Pending::utf8,
+                            input, len);
+    }
+
     /* Process a string of characters. */
     void nextSlice(const uint8_t *input, size_t len) {
         nextSliceUntracked(input, len);
+
+        /* Continuation tracking is opt-in and this branch predicts
+         * perfectly, so disabled streams pay nothing else here. */
+        if (has_continuation) trackContinuation(input, len);
     }
     void nextSlice(const char *s, size_t len) { nextSlice((const uint8_t *)s, len); }
     void nextSlice(const char *s) { nextSlice((const uint8_t *)s, strlen(s)); }
@@ -438,6 +503,22 @@ struct Stream {
      *
      * Wisp: ?usize is the bool return plus *consumed. */
     bool nextSliceUntilGround(const uint8_t *input, size_t len, size_t *consumed) {
+        const bool reached = nextSliceUntilGroundUntracked(input, len, consumed);
+        const size_t consumed_len = reached ? *consumed : len;
+        if (has_continuation && consumed_len > 0) trackContinuation(input, consumed_len);
+        return reached;
+    }
+
+    /* Like nextSlice but takes one byte and is necessarily a scalar
+     * operation that can't use SIMD. Prefer nextSlice if you can and
+     * try to get multiple bytes at once. */
+    void next(uint8_t c) {
+        nextUntracked(c);
+        if (has_continuation) trackContinuation(&c, 1);
+    }
+
+private:
+    bool nextSliceUntilGroundUntracked(const uint8_t *input, size_t len, size_t *consumed) {
         if (ground()) {
             *consumed = 0;
             return true;
@@ -463,12 +544,6 @@ struct Stream {
         return false;
     }
 
-    /* Like nextSlice but takes one byte and is necessarily a scalar
-     * operation that can't use SIMD. Prefer nextSlice if you can and
-     * try to get multiple bytes at once. */
-    void next(uint8_t c) { nextUntracked(c); }
-
-private:
     void nextSliceUntracked(const uint8_t *input, size_t len) {
         /* This is the maximum number of codepoints we can decode
          * at one time for this function call. This is somewhat arbitrary

@@ -11,10 +11,6 @@
  *
  * Not here yet:
  *   "test Action" only reifies the C ABI type, which is not carried over.
- *   The ten continuation tests ("nextSliceUntilGround ..." and
- *   "continuation ...") need stream_continuation.zig, which is not ported.
- *   The five nextSliceUntilGround tests use the continuation test handler
- *   and arrive with it.
  */
 
 #include "test_helpers.h"
@@ -1021,5 +1017,650 @@ TEST(stream, apc_vector_boundaries_match_scalar_path) {
         ASSERT_TRUE(scalar.handler.started == bulk.handler.started);
         ASSERT_TRUE(scalar.handler.ended == bulk.handler.ended);
         ASSERT_TRUE(scalar.handler.str() == bulk.handler.str());
+    }
+}
+
+/* ─── continuation ─────────────────────────────────────────────────────────
+ *
+ * Wisp: `?usize` from nextSliceUntilGround is the bool return plus
+ * *consumed, and writeContinuation returns a ContinuationError rather than
+ * an error union. A std::string writer cannot fail, so upstream's
+ * error.WriteFailed cases (which use a too-small fixed buffer) have no
+ * counterpart and are noted where they occur.
+ */
+
+static wisp::zigstd::Allocator contAlloc() { return wisp::zigstd::testing_allocator(); }
+
+struct ContinuationTestHandler {
+    size_t committed;
+    bool apc_active;
+    uint8_t apc_buf[256];
+    size_t apc_len;
+    bool dcs_active;
+
+    ContinuationTestHandler()
+        : committed(0), apc_active(false), apc_len(0), dcs_active(false) {}
+
+    void deinit() {}
+
+    void vt(const Action &a) {
+        switch (a.tag) {
+        case K::apc_start: apc_active = true; break;
+        case K::apc_put:
+            apc_buf[apc_len] = a.byte;
+            apc_len += 1;
+            break;
+        case K::apc_put_slice:
+            memcpy(apc_buf + apc_len, a.apc_put_slice.bytes, a.apc_put_slice.len);
+            apc_len += a.apc_put_slice.len;
+            break;
+        case K::dcs_hook: dcs_active = true; break;
+        case K::dcs_put: break;
+        case K::apc_end:
+            apc_active = false;
+            apc_len = 0;
+            committed += 1;
+            break;
+        case K::dcs_unhook:
+            dcs_active = false;
+            committed += 1;
+            break;
+        case K::print: committed += 1; break;
+        case K::print_slice: committed += a.print_slice.len; break;
+        case K::print_repeat: committed += a.count; break;
+        default: committed += 1; break;
+        }
+    }
+
+    std::string apcStr() const { return std::string((const char *)apc_buf, apc_len); }
+};
+
+struct ContinuationNullHandler {
+    void deinit() {}
+    void vt(const Action &) {}
+};
+
+typedef Stream<ContinuationTestHandler> ContStream;
+typedef Stream<ContinuationNullHandler> NullStream;
+
+/* Wisp: `.{ .allocator = alloc, .continuation_max_bytes = n }` */
+static ContStream::Options contOptions(size_t max_bytes) {
+    ContStream::Options o;
+    o.allocator = true;
+    o.continuation_max_bytes = wisp::terminal::stream_continuation::Maybe<size_t>(max_bytes);
+    return o;
+}
+
+TEST(stream, nextSliceUntilGround_stops_at_the_earliest_boundary) {
+    ContStream s((ContinuationTestHandler()));
+
+    s.nextSlice("\x1b[31");
+    ASSERT_TRUE(!s.ground());
+    s.handler.committed = 0;
+
+    static const char input[] = "mABC\x1b[";
+    size_t consumed = 0;
+    ASSERT_TRUE(s.nextSliceUntilGround((const uint8_t *)input, sizeof input - 1, &consumed));
+    ASSERT_TRUE(1 == consumed);
+    ASSERT_TRUE(s.ground());
+    ASSERT_TRUE(1 == s.handler.committed);
+
+    /* The suffix was not inspected by the handler and can be processed after
+     * the caller performs work at the boundary. */
+    s.nextSlice(input + consumed, sizeof input - 1 - consumed);
+    ASSERT_TRUE(!s.ground());
+    ASSERT_TRUE(wisp::terminal::parser::State::csi_entry == s.parser.state);
+    ASSERT_TRUE(4 == s.handler.committed);
+
+    s.deinit();
+}
+
+TEST(stream, nextSliceUntilGround_consumes_all_input_without_a_boundary) {
+    NullStream s((ContinuationNullHandler()));
+
+    size_t consumed = 99;
+    ASSERT_TRUE(s.nextSliceUntilGround((const uint8_t *)"unprocessed", 11, &consumed));
+    ASSERT_TRUE(0 == consumed);
+    ASSERT_TRUE(s.ground());
+
+    s.nextSlice("\x1b[");
+    ASSERT_TRUE(!s.nextSliceUntilGround((const uint8_t *)"123", 3, &consumed));
+    ASSERT_TRUE(!s.ground());
+
+    /* A boundary on the final byte is distinguishable from exhausting the
+     * input while still pending. */
+    ASSERT_TRUE(s.nextSliceUntilGround((const uint8_t *)"m", 1, &consumed));
+    ASSERT_TRUE(1 == consumed);
+    ASSERT_TRUE(s.ground());
+
+    s.deinit();
+}
+
+TEST(stream, nextSliceUntilGround_handles_UTF_8_boundaries) {
+    /* A completed codepoint is committed synchronously, and the printable
+     * suffix remains untouched. */
+    {
+        ContStream valid((ContinuationTestHandler()));
+        static const uint8_t lead[] = {0xF0};
+        valid.nextSlice(lead, 1);
+        static const uint8_t valid_input[] = {0x9F, 0x98, 0x84, 'X'};
+        size_t consumed = 0;
+        ASSERT_TRUE(valid.nextSliceUntilGround(valid_input, 4, &consumed));
+        ASSERT_TRUE(3 == consumed);
+        ASSERT_TRUE(valid.ground());
+        ASSERT_TRUE(1 == valid.handler.committed);
+        valid.deinit();
+    }
+
+    /* A malformed continuation emits the replacement codepoint and retries
+     * the same byte. Ground is observed after that complete byte operation. */
+    {
+        ContStream malformed((ContinuationTestHandler()));
+        static const uint8_t bad[] = {0xE0, 0xA0};
+        malformed.nextSlice(bad, 2);
+        size_t consumed = 0;
+        ASSERT_TRUE(malformed.nextSliceUntilGround((const uint8_t *)"A!", 2, &consumed));
+        ASSERT_TRUE(1 == consumed);
+        ASSERT_TRUE(malformed.ground());
+        ASSERT_TRUE(2 == malformed.handler.committed);
+        malformed.deinit();
+    }
+
+    /* If the retried byte is ESC, the stream has begun VT state at the end of
+     * that byte and must continue to the following ground boundary. */
+    {
+        ContStream retry_escape((ContinuationTestHandler()));
+        static const uint8_t bad[] = {0xE0, 0xA0};
+        retry_escape.nextSlice(bad, 2);
+        size_t consumed = 0;
+        ASSERT_TRUE(retry_escape.nextSliceUntilGround((const uint8_t *)"\x1b[mX", 4, &consumed));
+        ASSERT_TRUE(3 == consumed);
+        ASSERT_TRUE(retry_escape.ground());
+        retry_escape.deinit();
+    }
+}
+
+TEST(stream, nextSliceUntilGround_handles_aborts_and_bulk_strings) {
+    {
+        ContStream aborted((ContinuationTestHandler()));
+        aborted.nextSlice("\x1b[123");
+        static const uint8_t can_x[] = {0x18, 'X'};
+        size_t consumed = 0;
+        ASSERT_TRUE(aborted.nextSliceUntilGround(can_x, 2, &consumed));
+        ASSERT_TRUE(1 == consumed);
+        ASSERT_TRUE(aborted.ground());
+        aborted.deinit();
+    }
+
+    {
+        ContStream apc((ContinuationTestHandler()));
+        apc.nextSlice("\x1b_Gseed");
+        uint8_t input[131];
+        memset(input, 'a', 128);
+        input[128] = 0x1B;
+        input[129] = '\\';
+        input[130] = 'X';
+        size_t consumed = 0;
+        ASSERT_TRUE(apc.nextSliceUntilGround(input, 131, &consumed));
+        ASSERT_TRUE(130 == consumed);
+        ASSERT_TRUE(apc.ground());
+        apc.deinit();
+    }
+}
+
+TEST(stream, nextSliceUntilGround_tracks_only_the_consumed_prefix) {
+    NullStream::Options o;
+    o.allocator = true;
+    o.continuation_max_bytes = wisp::terminal::stream_continuation::Maybe<size_t>((size_t)64);
+    NullStream s(ContinuationNullHandler(), o);
+
+    s.nextSlice("\x1b[31");
+    size_t consumed = 0;
+    ASSERT_TRUE(s.nextSliceUntilGround((const uint8_t *)"mX\x1b[", 4, &consumed));
+    ASSERT_TRUE(1 == consumed);
+
+    {
+        std::string out;
+        ASSERT_TRUE(NullStream::ContinuationError::none == s.writeContinuation(&out));
+        ASSERT_TRUE(0 == out.size());
+    }
+
+    s.nextSlice("\x1b[");
+    ASSERT_TRUE(!s.nextSliceUntilGround((const uint8_t *)"123", 3, &consumed));
+    {
+        std::string out;
+        ASSERT_TRUE(NullStream::ContinuationError::none == s.writeContinuation(&out));
+        ASSERT_TRUE(out == std::string("\x1b[123"));
+    }
+
+    s.deinit();
+}
+
+TEST(stream, continuation_lifecycle) {
+    {
+        ContStream disabled((ContinuationTestHandler()));
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::ContinuationDisabled ==
+                    disabled.writeContinuation(&out));
+        disabled.deinit();
+    }
+
+    {
+        ContStream::Options o;
+        o.allocator = true;
+        o.continuation_max_bytes = wisp::terminal::stream_continuation::Maybe<size_t>((size_t)0);
+        ContStream zero_capacity(ContinuationTestHandler(), o);
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::ContinuationDisabled ==
+                    zero_capacity.writeContinuation(&out));
+        zero_capacity.deinit();
+    }
+
+    {
+        ContStream::Options o;
+        o.allocator = false;
+        o.continuation_max_bytes = wisp::terminal::stream_continuation::Maybe<size_t>((size_t)64);
+        ContStream no_allocator(ContinuationTestHandler(), o);
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::ContinuationDisabled ==
+                    no_allocator.writeContinuation(&out));
+        no_allocator.deinit();
+    }
+
+    {
+        ContStream tracked(ContinuationTestHandler(), contOptions(64));
+
+        tracked.nextSlice("complete input");
+        {
+            std::string out;
+            ASSERT_TRUE(ContStream::ContinuationError::none == tracked.writeContinuation(&out));
+            ASSERT_TRUE(0 == out.size());
+        }
+
+        /* Wisp: upstream also asserts error.WriteFailed here from a 1-byte
+         * fixed writer. A std::string writer cannot fail, so instead the
+         * suffix is simply written in full. */
+        tracked.nextSlice("\x1b[");
+        {
+            std::string out;
+            ASSERT_TRUE(ContStream::ContinuationError::none == tracked.writeContinuation(&out));
+            ASSERT_TRUE(out == std::string("\x1b["));
+        }
+        tracked.deinit();
+    }
+
+    {
+        wisp::zigstd::FailingAllocator failing(contAlloc(), 0);
+        NullStream::Options o;
+        o.allocator = true;
+        o.continuation_max_bytes = wisp::terminal::stream_continuation::Maybe<size_t>((size_t)64);
+        NullStream failing_stream(ContinuationNullHandler(), o);
+        /* Wisp: the stream's allocator is a flag, so the tracker is rebuilt
+         * on the failing allocator to reproduce upstream's init, where the
+         * best-effort initial reservation itself fails. */
+        failing_stream.continuation.deinit();
+        failing_stream.continuation =
+            wisp::terminal::stream_continuation::Tracker::init(failing.allocator(), 64);
+        failing_stream.nextSlice("\x1b[");
+        std::string out;
+        ASSERT_TRUE(NullStream::ContinuationError::ContinuationUnavailable ==
+                    failing_stream.writeContinuation(&out));
+        failing_stream.deinit();
+    }
+}
+
+TEST(stream, continuation_suffixes_are_replay_safe) {
+    struct Case {
+        const char *input;
+        size_t input_len;
+        const char *expected;
+        size_t expected_len;
+    };
+    static const Case cases[] = {
+        {"text\x1b", 5, "\x1b", 1},
+        {"text\x1b[12;", 9, "\x1b[12;", 5},
+        {"text\x1b[1\x07;2", 10, "\x1b[1;2", 5},
+        {"text\x1b]2;hello", 13, "\x1b]2;hello", 9},
+        {"text\x1b_Gabc", 9, "\x1b_Gabc", 5},
+        {"text\x1bP+qabc", 10, "\x1bP+qabc", 6},
+        {"text\xE0\xA0\xF0", 7, "\xF0", 1},
+        {"text\x1b[12\x1b", 9, "\x1b", 1},
+        {"text\x1b[12\x9D""2;title", 14, "\x1b[12\x9D""2;title", 10},
+    };
+
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        ContStream s(ContinuationTestHandler(), contOptions(1024));
+        s.nextSlice(cases[i].input, cases[i].input_len);
+
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::none == s.writeContinuation(&out));
+        ASSERT_TRUE(out == std::string(cases[i].expected, cases[i].expected_len));
+        s.deinit();
+    }
+}
+
+TEST(stream, continuation_reconstructs_every_unfinished_VT_state) {
+    struct Case {
+        const char *input;
+        wisp::terminal::parser::State state;
+    };
+    static const Case cases[] = {
+        {"\x1b", wisp::terminal::parser::State::escape},
+        {"\x1b(", wisp::terminal::parser::State::escape_intermediate},
+        {"\x1b[", wisp::terminal::parser::State::csi_entry},
+        {"\x1b[1", wisp::terminal::parser::State::csi_param},
+        {"\x1b[1$", wisp::terminal::parser::State::csi_intermediate},
+        {"\x1b[:", wisp::terminal::parser::State::csi_ignore},
+        {"\x1bP", wisp::terminal::parser::State::dcs_entry},
+        {"\x1bP1", wisp::terminal::parser::State::dcs_param},
+        {"\x1bP1$", wisp::terminal::parser::State::dcs_intermediate},
+        {"\x1bP1q", wisp::terminal::parser::State::dcs_passthrough},
+        {"\x1bP:", wisp::terminal::parser::State::dcs_ignore},
+        {"\x1b]2;title", wisp::terminal::parser::State::osc_string},
+        {"\x1b_Gpayload", wisp::terminal::parser::State::sos_pm_apc_string},
+    };
+
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        ContStream source(ContinuationTestHandler(), contOptions(1024));
+        source.nextSlice(cases[i].input);
+        ASSERT_TRUE(cases[i].state == source.parser.state);
+
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::none == source.writeContinuation(&out));
+
+        ContStream restored(ContinuationTestHandler(), contOptions(1024));
+        restored.nextSlice(out.data(), out.size());
+        ASSERT_TRUE(0 == restored.handler.committed);
+        ASSERT_TRUE(source.parser.state == restored.parser.state);
+        ASSERT_TRUE(source.utf8decoder.state == restored.utf8decoder.state);
+
+        restored.deinit();
+        source.deinit();
+    }
+
+    /* Parser ground is still unfinished while the UTF-8 decoder is waiting
+     * for the remaining bytes of a codepoint. */
+    {
+        ContStream utf8(ContinuationTestHandler(), contOptions(4));
+        utf8.next(0xF0);
+        ASSERT_TRUE(wisp::terminal::parser::State::ground == utf8.parser.state);
+        ASSERT_TRUE(utf8.utf8decoder.state != 0);
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::none == utf8.writeContinuation(&out));
+        ASSERT_TRUE(out == std::string("\xF0", 1));
+        utf8.deinit();
+    }
+}
+
+TEST(stream, continuation_is_chunking_independent_and_idempotent) {
+    static const char input[] = "committed\x1b[1\x07;2";
+    const size_t input_len = sizeof input - 1;
+
+    ContStream bulk(ContinuationTestHandler(), contOptions(1024));
+    bulk.nextSlice(input, input_len);
+
+    ContStream scalar(ContinuationTestHandler(), contOptions(1024));
+    for (size_t i = 0; i < input_len; i++) scalar.next((uint8_t)input[i]);
+
+    std::string bulk_out;
+    ASSERT_TRUE(ContStream::ContinuationError::none == bulk.writeContinuation(&bulk_out));
+    std::string scalar_out;
+    ASSERT_TRUE(ContStream::ContinuationError::none == scalar.writeContinuation(&scalar_out));
+    ASSERT_TRUE(bulk_out == scalar_out);
+
+    ContStream restored(ContinuationTestHandler(), contOptions(1024));
+    restored.nextSlice(bulk_out.data(), bulk_out.size());
+    ASSERT_TRUE(0 == restored.handler.committed);
+
+    std::string restored_out;
+    ASSERT_TRUE(ContStream::ContinuationError::none == restored.writeContinuation(&restored_out));
+    ASSERT_TRUE(bulk_out == restored_out);
+
+    bulk.handler.committed = 0;
+    restored.handler.committed = 0;
+    bulk.nextSlice("mZ");
+    restored.next('m');
+    restored.next('Z');
+    ASSERT_TRUE(bulk.handler.committed == restored.handler.committed);
+
+    restored.deinit();
+    scalar.deinit();
+    bulk.deinit();
+}
+
+TEST(stream, continuation_rebuilds_APC_handler_input) {
+    ContStream source(ContinuationTestHandler(), contOptions(1024));
+    source.nextSlice("committed\x1b_Gabc");
+
+    std::string out;
+    ASSERT_TRUE(ContStream::ContinuationError::none == source.writeContinuation(&out));
+
+    ContStream restored(ContinuationTestHandler(), contOptions(1024));
+    restored.nextSlice(out.data(), out.size());
+    ASSERT_TRUE(0 == restored.handler.committed);
+    ASSERT_TRUE(restored.handler.apc_active);
+    ASSERT_TRUE(source.handler.apcStr() == restored.handler.apcStr());
+
+    source.handler.committed = 0;
+    restored.handler.committed = 0;
+    source.nextSlice("\x1b\\");
+    restored.nextSlice("\x1b\\");
+    ASSERT_TRUE(source.handler.committed == restored.handler.committed);
+    ASSERT_TRUE(!source.handler.apc_active);
+    ASSERT_TRUE(!restored.handler.apc_active);
+
+    restored.deinit();
+    source.deinit();
+}
+
+TEST(stream, continuation_cap_and_recovery) {
+    /* The raw feed exceeds the cap, but only the unfinished three-byte
+     * CSI suffix is retained. */
+    {
+        ContStream seeded(ContinuationTestHandler(), contOptions(4));
+        seeded.nextSlice("committed text\x1b[1");
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::none == seeded.writeContinuation(&out));
+        ASSERT_TRUE(out == std::string("\x1b[1"));
+        seeded.deinit();
+    }
+
+    ContStream exceeded(ContinuationTestHandler(), contOptions(4));
+    exceeded.nextSlice("\x1b[123");
+    {
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::ContinuationUnavailable ==
+                    exceeded.writeContinuation(&out));
+    }
+
+    /* Completing the CSI reaches ground and recovers without rebuilding the
+     * Stream. A later unfinished sequence is tracked normally. */
+    exceeded.nextSlice("mtext\x1b[");
+    {
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::none == exceeded.writeContinuation(&out));
+        ASSERT_TRUE(out == std::string("\x1b["));
+    }
+
+    /* A fresh ESC seed also recovers broken tracking even when the stream
+     * never reaches ground: the ESC abandons the previous unfinished
+     * state and everything after it is retained. */
+    exceeded.nextSlice("\x1b[123");
+    {
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::ContinuationUnavailable ==
+                    exceeded.writeContinuation(&out));
+    }
+    exceeded.nextSlice("\x1b]0;");
+    {
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::none == exceeded.writeContinuation(&out));
+        ASSERT_TRUE(out == std::string("\x1b]0;"));
+    }
+
+    exceeded.deinit();
+}
+
+TEST(stream, continuation_spans_multiple_bulk_feeds) {
+    /* An unfinished APC grows across feeds that contain no new seed. */
+    {
+        ContStream apc(ContinuationTestHandler(), contOptions(1024));
+        apc.nextSlice("text\x1b_Gab");
+        apc.nextSlice("cd");
+        apc.nextSlice("ef");
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::none == apc.writeContinuation(&out));
+        ASSERT_TRUE(out == std::string("\x1b_Gabcdef"));
+        apc.deinit();
+    }
+
+    /* An incomplete UTF-8 sequence grows across feeds of its
+     * continuation bytes. */
+    ContStream utf8(ContinuationTestHandler(), contOptions(1024));
+    utf8.nextSlice("text\xF0");
+    utf8.nextSlice("\x9F");
+    {
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::none == utf8.writeContinuation(&out));
+        ASSERT_TRUE(out == std::string("\xF0\x9F", 2));
+    }
+
+    /* A later feed with its own seed drops everything retained earlier. */
+    utf8.nextSlice("\x98\x84 done \x1b[38;5");
+    {
+        std::string out;
+        ASSERT_TRUE(ContStream::ContinuationError::none == utf8.writeContinuation(&out));
+        ASSERT_TRUE(out == std::string("\x1b[38;5"));
+    }
+
+    utf8.deinit();
+}
+
+TEST(stream, continuation_exact_cap_and_large_unfinished_string) {
+    {
+        NullStream::Options o;
+        o.allocator = true;
+        o.continuation_max_bytes = wisp::terminal::stream_continuation::Maybe<size_t>((size_t)5);
+        NullStream exact(ContinuationNullHandler(), o);
+        exact.nextSlice("\x1b[123");
+        std::string out;
+        ASSERT_TRUE(NullStream::ContinuationError::none == exact.writeContinuation(&out));
+        ASSERT_TRUE(out == std::string("\x1b[123"));
+        exact.deinit();
+    }
+
+    const size_t payload_len = 12 * 1024;
+    std::string input;
+    input.append("\x1b_G", 3);
+    input.append(payload_len - 3, 'A');
+
+    NullStream::Options o;
+    o.allocator = true;
+    o.continuation_max_bytes = wisp::terminal::stream_continuation::Maybe<size_t>(payload_len);
+    NullStream large(ContinuationNullHandler(), o);
+    large.nextSlice(input.data(), input.size());
+    std::string out;
+    ASSERT_TRUE(NullStream::ContinuationError::none == large.writeContinuation(&out));
+    ASSERT_TRUE(out == input);
+    large.deinit();
+}
+
+TEST(stream, continuation_allocation_failure_recovers) {
+    wisp::zigstd::FailingAllocator failing(contAlloc(), (size_t)-1);
+    NullStream::Options o;
+    o.allocator = true;
+    o.continuation_max_bytes =
+        wisp::terminal::stream_continuation::Maybe<size_t>((size_t)(16 * 1024));
+    NullStream s(ContinuationNullHandler(), o);
+    s.continuation.alloc = failing.allocator();
+
+    std::string input;
+    input.append("\x1b[", 2);
+    input.append(12 * 1024 - 2, '1');
+
+    failing.fail_index = failing.alloc_index;
+    s.nextSlice(input.data(), input.size());
+    {
+        std::string out;
+        ASSERT_TRUE(NullStream::ContinuationError::ContinuationUnavailable ==
+                    s.writeContinuation(&out));
+    }
+
+    failing.fail_index = (size_t)-1;
+    s.next('m');
+    {
+        std::string out;
+        ASSERT_TRUE(NullStream::ContinuationError::none == s.writeContinuation(&out));
+        ASSERT_TRUE(0 == out.size());
+    }
+
+    s.deinit();
+}
+
+TEST(stream, continuation_every_byte_cuts_preserve_future_behavior) {
+    static const char *corpora[] = {
+        "plain \xF0\x9F\x98\x84 utf8",
+        "bad \xE0\xA0\xF0\x9F\x98\x84 utf8",
+        "\x1b[1\x07;2mstyled\x1b[0m",
+        "\x1b]2;window title\x1b\\text",
+        "\x1bP$qm\x1b\\text",
+        "\x1b_Ga=q;payload\x1b\\text",
+        "\x1b_25a1;s\x1b\\text",
+        "\x1b]2;first\x1b\\\x1b_Gsecond",
+        "\x1b[12\x9D""2;title\x1b\\text",
+        "\x1b[12\x18text\x1b[1\x1Atext",
+    };
+
+    for (size_t ci = 0; ci < sizeof corpora / sizeof corpora[0]; ci++) {
+        const std::string corpus(corpora[ci]);
+        for (size_t cut = 0; cut <= corpus.size(); cut++) {
+            ContStream source(ContinuationTestHandler(), contOptions(64 * 1024));
+            source.nextSlice(corpus.data(), cut);
+
+            std::string continuation;
+            ASSERT_TRUE(ContStream::ContinuationError::none ==
+                        source.writeContinuation(&continuation));
+
+            ContStream restored(ContinuationTestHandler(), contOptions(64 * 1024));
+            restored.nextSlice(continuation.data(), continuation.size());
+            ASSERT_TRUE(0 == restored.handler.committed);
+            ASSERT_TRUE(source.handler.apc_active == restored.handler.apc_active);
+            ASSERT_TRUE(source.handler.dcs_active == restored.handler.dcs_active);
+            if (source.handler.apc_active) {
+                ASSERT_TRUE(source.handler.apcStr() == restored.handler.apcStr());
+            }
+
+            std::string reexport;
+            ASSERT_TRUE(ContStream::ContinuationError::none ==
+                        restored.writeContinuation(&reexport));
+            ASSERT_TRUE(continuation == reexport);
+
+            source.handler.committed = 0;
+            restored.handler.committed = 0;
+            source.nextSlice(corpus.data() + cut, corpus.size() - cut);
+            size_t offset = cut;
+            size_t partition = cut + corpus.size() + 1;
+            while (offset < corpus.size()) {
+                partition = partition * 1664525u + 1013904223u;
+                const size_t room = corpus.size() - offset;
+                const size_t len = (1 + partition % 7) < room ? (1 + partition % 7) : room;
+                restored.nextSlice(corpus.data() + offset, len);
+                offset += len;
+            }
+            ASSERT_TRUE(source.handler.committed == restored.handler.committed);
+            ASSERT_TRUE(source.handler.apc_active == restored.handler.apc_active);
+            ASSERT_TRUE(source.handler.dcs_active == restored.handler.dcs_active);
+
+            std::string source_final;
+            ASSERT_TRUE(ContStream::ContinuationError::none ==
+                        source.writeContinuation(&source_final));
+            std::string restored_final;
+            ASSERT_TRUE(ContStream::ContinuationError::none ==
+                        restored.writeContinuation(&restored_final));
+            ASSERT_TRUE(source_final == restored_final);
+
+            restored.deinit();
+            source.deinit();
+        }
     }
 }

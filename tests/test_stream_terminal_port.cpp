@@ -3245,10 +3245,133 @@ TEST(stream_terminal, device_attributes__custom_response) {
 
 /* ─── kitty drag and drop ──────────────────────────────────────────────── */
 
-/* Wisp: upstream's "continuation reconstructs standard stream without
- * duplicate effects" drives Stream.writeContinuation, which needs
- * stream_continuation.zig; that module is not ported yet, so this test is
- * not ported. */
+/* ─── continuation ─────────────────────────────────────────────────────── */
+
+static size_t g_cont_bell = 0;
+static size_t g_cont_title = 0;
+static size_t g_cont_write = 0;
+static size_t g_cont_notification = 0;
+static size_t g_cont_clipboard = 0;
+
+static void contReset() {
+    g_cont_bell = 0;
+    g_cont_title = 0;
+    g_cont_write = 0;
+    g_cont_notification = 0;
+    g_cont_clipboard = 0;
+}
+
+static void contBell(Handler *) { g_cont_bell += 1; }
+static void contTitleChanged(Handler *) { g_cont_title += 1; }
+static void contWritePty(Handler *, const char *, size_t) { g_cont_write += 1; }
+static void contDesktopNotification(Handler *, wisp::terminal::stream::Action::ShowDesktopNotification) {
+    g_cont_notification += 1;
+}
+static void contClipboardWrite(Handler *, clip::Write write) {
+    g_cont_clipboard += 1;
+    write.reply(clip::Write::Result::makeSuccess(false));
+}
+
+/* Wisp: `Stream.init(.{ ..., .continuation_max_bytes = 1024 })` */
+static Stream::Options contStreamOptions() {
+    Stream::Options o;
+    o.allocator = true;
+    o.continuation_max_bytes = wisp::terminal::stream_continuation::Maybe<size_t>((size_t)1024);
+    return o;
+}
+
+struct ContStreamHolder {
+    Stream s;
+    explicit ContStreamHolder(const Handler &h) : s(h, contStreamOptions()) {}
+    ~ContStreamHolder() { s.deinit(); }
+};
+
+TEST(stream_terminal, continuation_reconstructs_standard_stream_without_duplicate_effects) {
+    contReset();
+
+    static const char committed[] = "A\n\x07"
+                                    "\x1b]2;title\x1b\\"
+                                    "\x1b[5n"
+                                    "\x1b]9;body\x1b\\"
+                                    "\x1b]52;c;aA==\x1b\\";
+    const size_t committed_len = sizeof committed - 1;
+
+    TERM(source_terminal, 80, 24);
+
+    Handler source_handler = Handler::init(&source_terminal);
+    source_handler.effects.bell = &contBell;
+    source_handler.effects.title_changed = &contTitleChanged;
+    source_handler.effects.write_pty = &contWritePty;
+    source_handler.effects.desktop_notification = &contDesktopNotification;
+    source_handler.effects.clipboard_write = &contClipboardWrite;
+    ContStreamHolder source_holder(source_handler);
+    Stream &source = source_holder.s;
+
+    /* Terminal mutation and all callbacks have already committed. The
+     * unfinished CSI is the only input needed to recreate the stream state. */
+    {
+        std::string input(committed, committed_len);
+        input += "\x1b[31";
+        source.nextSlice(input.data(), input.size());
+    }
+    ASSERT_TRUE(1 == g_cont_bell);
+    ASSERT_TRUE(1 == g_cont_title);
+    ASSERT_TRUE(1 == g_cont_write);
+    ASSERT_TRUE(1 == g_cont_notification);
+    ASSERT_TRUE(1 == g_cont_clipboard);
+
+    std::string continuation;
+    ASSERT_TRUE(Stream::ContinuationError::none == source.writeContinuation(&continuation));
+    ASSERT_TRUE(continuation == std::string("\x1b[31"));
+
+    TERM(restored_terminal, 80, 24);
+
+    /* Stand in for restoring the already-committed terminal snapshot. */
+    {
+        StreamHolder snapshot(Handler::init(&restored_terminal));
+        snapshot.s.nextSlice(committed, committed_len);
+    }
+
+    const std::string before = restored_terminal.plainString();
+    const vt::size::CellCountInt before_x = restored_terminal.screens.active->cursor.x;
+    const vt::size::CellCountInt before_y = restored_terminal.screens.active->cursor.y;
+    const vt::style::Id before_style = restored_terminal.screens.active->cursor.style_id;
+    ASSERT_TRUE(restored_terminal.getTitle() != nullptr);
+    const std::string before_title = restored_terminal.getTitle();
+
+    Handler restored_handler = Handler::init(&restored_terminal);
+    restored_handler.effects.bell = &contBell;
+    restored_handler.effects.title_changed = &contTitleChanged;
+    restored_handler.effects.write_pty = &contWritePty;
+    restored_handler.effects.desktop_notification = &contDesktopNotification;
+    restored_handler.effects.clipboard_write = &contClipboardWrite;
+    ContStreamHolder restored_holder(restored_handler);
+    Stream &restored = restored_holder.s;
+
+    contReset();
+    restored.nextSlice(continuation.data(), continuation.size());
+    ASSERT_TRUE(0 == g_cont_bell);
+    ASSERT_TRUE(0 == g_cont_title);
+    ASSERT_TRUE(0 == g_cont_write);
+    ASSERT_TRUE(0 == g_cont_notification);
+    ASSERT_TRUE(0 == g_cont_clipboard);
+    EXPECT_STR(before.c_str(), restored_terminal.plainString());
+    ASSERT_TRUE(before_x == restored_terminal.screens.active->cursor.x);
+    ASSERT_TRUE(before_y == restored_terminal.screens.active->cursor.y);
+    ASSERT_TRUE(before_style == restored_terminal.screens.active->cursor.style_id);
+    ASSERT_TRUE(restored_terminal.getTitle() != nullptr);
+    ASSERT_TRUE(before_title == std::string(restored_terminal.getTitle()));
+
+    source.nextSlice("mB");
+    restored.nextSlice("mB");
+    {
+        /* Both sides are temporaries, so both are bound before comparing. */
+        const std::string source_text = source_terminal.plainString();
+        EXPECT_STR(source_text.c_str(), restored_terminal.plainString());
+    }
+    ASSERT_TRUE(source_terminal.screens.active->cursor.style_id ==
+                restored_terminal.screens.active->cursor.style_id);
+}
 
 namespace kdnd = wisp::terminal::kitty::dnd;
 
