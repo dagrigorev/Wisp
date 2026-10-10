@@ -5,10 +5,6 @@
  * TRANSLITERATION, see parser.hpp and osc.hpp for the Zig-to-C++ mapping.
  * Comments are upstream's unless marked "Wisp:".
  *
- * Wisp: named vt_stream.hpp because stream.hpp is still the earlier
- * reimplementation the app runs on; this file replaces it once
- * stream_terminal.zig is ported on top of Terminal.zig.
- *
  * Wisp, differences in shape rather than behavior:
  *   - `handler.vt(comptime action, value)` is `handler.vt(const Action &)`,
  *     with Action a tag plus one field per payload. Upstream specializes per
@@ -25,8 +21,8 @@
  */
 
 #pragma once
-#ifndef WISP_TERMINAL_VT_STREAM_HPP
-#define WISP_TERMINAL_VT_STREAM_HPP
+#ifndef WISP_TERMINAL_STREAM_HPP
+#define WISP_TERMINAL_STREAM_HPP
 
 #include <stddef.h>
 #include <stdint.h>
@@ -2223,4 +2219,4 @@ private:
 } /* namespace terminal */
 } /* namespace wisp */
 
-#endif /* WISP_TERMINAL_VT_STREAM_HPP */
+#endif /* WISP_TERMINAL_STREAM_HPP */

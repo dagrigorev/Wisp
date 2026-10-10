@@ -47,7 +47,7 @@
 #include "paste.hpp"
 #include "size_report.hpp"
 #include "terminfo.hpp"
-#include "vt_stream.hpp"
+#include "stream.hpp"
 
 namespace wisp {
 namespace terminal {
