@@ -61,11 +61,21 @@ These upstream features are disabled in Wisp:
 kitty_graphics      = false
 glyph_protocol      = false
 tmux_control_mode   = false
+oniguruma           = false
 ```
 
 Code and tests behind them are omitted, each with a `Wisp:` note saying which flag
 gated it. Do not port them "for completeness" — they pull in dependencies the port does
 not have.
+
+**Do not substitute a different library for a gated one.** Upstream's behaviour at these
+sites is the library's behaviour, so a replacement is a reimplementation with the same
+name, which is the one thing this port is not. `StringMap.zig` is the worked example: its
+`searchIterator` is literally `void` without Oniguruma and all three of its tests open
+with `if (comptime !build_options.oniguruma) return error.SkipZigTest`, so the correct
+port carries the struct and omits the search machinery — rather than backing it with
+`std::regex`, which has no lookbehind and no retry limit and would therefore quietly
+assert different behaviour under upstream's test names.
 
 Tests are compiled with `WISP_IS_TEST=1` and `WISP_SLOW_RUNTIME_SAFETY=1`.
 
