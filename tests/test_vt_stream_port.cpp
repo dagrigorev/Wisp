@@ -14,7 +14,7 @@
  */
 
 #include "test_helpers.h"
-#include "vt_stream.hpp"
+#include "stream.hpp"
 
 #include <string>
 #include <vector>
