@@ -5,8 +5,8 @@
  * MIT License — see THIRD_PARTY_NOTICES.md
  *
  * Upstream's tests: same inputs, same assertions, same names.
- * Wisp: lz4.zig's `test { _ = @import("lz4_differential.zig"); }` pulls in
- * a comparison against the reference liblz4, which Wisp does not vendor.
+ * Wisp: lz4.zig's `test { _ = @import("lz4_differential.zig"); }` is carried
+ * by tests/test_vt_lz4_differential_port.cpp.
  */
 
 #include <stdlib.h>

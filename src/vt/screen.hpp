@@ -41,6 +41,11 @@
 namespace wisp {
 namespace vt {
 
+/* Wisp: StringMap.zig imports Screen.zig, so StringMap is only completed
+ * later, in string_map.hpp. selectionStringMap returns it by value, which a
+ * declaration may do with an incomplete type. */
+struct StringMap;
+
 namespace formatter {
 struct PinMapMap;
 }
@@ -1374,6 +1379,18 @@ struct Screen {
      *
      * For more flexibility, use a ScreenFormatter directly. */
     std::string selectionString(const SelectionString &opts);
+
+    /* Returns a StringMap associated with a selection. The map contains the
+     * selection's raw text and a mapping from each byte to its screen
+     * location.
+     *
+     * The returned map is owned by the caller.
+     *
+     * Wisp: defined in string_map.hpp, which is where StringMap becomes a
+     * complete type. Upstream has the reverse dependency — StringMap.zig
+     * imports Screen.zig — so this cannot sit beside selectionString in
+     * formatter.hpp without a cycle. */
+    StringMap selectionStringMap(const SelectionString &opts);
 
     struct SelectLine {
         /* The pin of some part of the line to select. */
