@@ -13,9 +13,9 @@ License: MIT, (c) 2024 Mitchell Hashimoto and Ghostty contributors
 | | Files | Lines |
 |---|---:|---:|
 | Upstream `src/` (Zig) | 589 | 342401 |
-| Ported | - | 98932 |
+| Ported | - | 100051 |
 | Not applicable to this port | - | 59947 |
-| Remaining | - | 183522 |
+| Remaining | - | 182403 |
 | ...of which partially ported | - | 0 |
 
 Status values: `todo`, `wip`, `done`, `n/a`. A `wip` file counts
@@ -109,7 +109,7 @@ toward *remaining*.
 | `terminal/parse_table.zig` | 448 | done |
 | `terminal/build_options.zig` | 333 | todo |
 | `terminal/Tabstops.zig` | 297 | done |
-| `terminal/StringMap.zig` | 296 | todo |
+| `terminal/StringMap.zig` | 296 | done |
 | `terminal/mem.zig` | 260 | done |
 | `terminal/clipboard.zig` | 256 | done |
 | `terminal/paste.zig` | 247 | done |
@@ -122,17 +122,17 @@ toward *remaining*.
 | `terminal/ScreenSet.zig` | 154 | done |
 | `terminal/device_status.zig` | 144 | done |
 | `terminal/UTF8Decoder.zig` | 142 | done |
-| `terminal/fraction.zig` | 142 | todo |
+| `terminal/fraction.zig` | 142 | done |
 | `terminal/charsets.zig` | 115 | done |
 | `terminal/point.zig` | 112 | done |
 | `terminal/ansi.zig` | 109 | done |
 | `terminal/x11_color.zig` | 107 | done |
 | `terminal/main.zig` | 104 | todo |
 | `terminal/sys.zig` | 102 | done |
-| `terminal/csi.zig` | 55 | todo |
-| `terminal/focus.zig` | 39 | todo |
-| `terminal/selection_codepoints.zig` | 31 | todo |
-| `terminal/cursor.zig` | 25 | todo |
+| `terminal/csi.zig` | 55 | done |
+| `terminal/focus.zig` | 39 | done |
+| `terminal/selection_codepoints.zig` | 31 | done |
+| `terminal/cursor.zig` | 25 | done |
 | `terminal/lib.zig` | 24 | todo |
 | `terminal/search.zig` | 23 | todo |
 | `terminal/kitty.zig` | 17 | done |
@@ -469,7 +469,7 @@ _Not applicable: Linux GTK application runtime._
 | `terminal/osc/parsers/rxvt_extension.zig` | 59 | todo |
 | `terminal/osc/parsers/report_pwd.zig` | 48 | todo |
 | `terminal/osc/parsers/mouse_shape.zig` | 39 | todo |
-| `terminal/osc/encoding.zig` | 38 | todo |
+| `terminal/osc/encoding.zig` | 38 | done |
 | `terminal/osc/parsers/change_window_icon.zig` | 33 | todo |
 | `terminal/osc/parsers.zig` | 23 | done |
 
@@ -742,7 +742,7 @@ _Not applicable: Apple Metal backend._
 | File | Lines | Status |
 |---|---:|---|
 | `terminal/compress/lz4.zig` | 891 | done |
-| `terminal/compress/lz4_differential.zig` | 493 | todo |
+| `terminal/compress/lz4_differential.zig` | 493 | done |
 | `terminal/compress/Page.zig` | 412 | done |
 
 ### `lib`
