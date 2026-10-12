@@ -5,9 +5,15 @@
  *
  * Upstream's tests: same inputs, same assertions, same names. Built with
  * WISP_IS_TEST and WISP_SLOW_RUNTIME_SAFETY, as upstream's tests run.
+ *
+ * Wisp: string_map.hpp is included for compile coverage only. It carries
+ * StringMap.zig and Screen.zig's selectionStringMap, and has no tests of its
+ * own because all three of StringMap.zig's tests are SkipZigTest without
+ * Oniguruma, which Wisp does not link.
  */
 
 #include "vt_screen_test_helpers.hpp"
+#include "../vt/string_map.hpp"
 
 TEST(screen, Screen_forwards_optional_scrollback_limits) {
     const size_t max_lines = 123;
