@@ -877,6 +877,22 @@ inline void Terminal::printCell(uint32_t unmapped_c, Cell::Wide wide) {
         }
     }
 
+    /* If this is a Kitty unicode placeholder then we need to mark the
+     * row so that the renderer can lookup rows with these much faster.
+     *
+     * Wisp: upstream guards this on build_options.kitty_graphics. The port
+     * omitted it while that flag was false; it is restored now that Kitty
+     * graphics is in scope. Without it PlacementIterator finds nothing,
+     * because it skips every row without the flag.
+     *
+     * Wisp: the codepoint is spelled out rather than taken from
+     * kitty::graphics::graphics_unicode::placeholder, because that header
+     * includes this one's headers and the include would cycle. The two must
+     * stay in step; it is U+10EEEE in both. */
+    if (c == 0x10EEEE) {
+        screens.active->cursor.page_row->setKittyVirtualPlaceholder(true);
+    }
+
     /* We check for an active hyperlink first because setHyperlink
      * handles clearing the old hyperlink and an optimization if we're
      * overwriting the same hyperlink. */
