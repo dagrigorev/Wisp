@@ -13,9 +13,9 @@ License: MIT, (c) 2024 Mitchell Hashimoto and Ghostty contributors
 | | Files | Lines |
 |---|---:|---:|
 | Upstream `src/` (Zig) | 589 | 342401 |
-| Ported | - | 100051 |
+| Ported | - | 103096 |
 | Not applicable to this port | - | 59947 |
-| Remaining | - | 182403 |
+| Remaining | - | 179358 |
 | ...of which partially ported | - | 0 |
 
 Status values: `todo`, `wip`, `done`, `n/a`. A `wip` file counts
@@ -492,12 +492,12 @@ _Not applicable: Linux GTK application runtime._
 | File | Lines | Status |
 |---|---:|---|
 | `terminal/search/screen.zig` | 2126 | todo |
-| `terminal/search/sliding_window.zig` | 1798 | todo |
+| `terminal/search/sliding_window.zig` | 1798 | done |
 | `terminal/search/terminal.zig` | 767 | todo |
 | `terminal/search/Thread.zig` | 681 | todo |
-| `terminal/search/pagelist.zig` | 621 | todo |
-| `terminal/search/viewport.zig` | 449 | todo |
-| `terminal/search/active.zig` | 177 | todo |
+| `terminal/search/pagelist.zig` | 621 | done |
+| `terminal/search/viewport.zig` | 449 | done |
+| `terminal/search/active.zig` | 177 | done |
 
 ### `font/sprite`
 
