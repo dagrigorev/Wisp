@@ -98,6 +98,31 @@ a `std::vector` member zeroed in place corrupts the allocator.
 **Byte lengths in tests are easy to get wrong** when the string contains escapes or an
 embedded NUL — count them, do not eyeball them.
 
+**Zig's `undefined` and `unreachable` carry guarantees C++ drops.** This has been caught
+three times, always by MSVC `C4701`, and always in code that looked like a faithful
+transliteration:
+
+- A variable declared `= undefined` and assigned in every path upstream can reach is
+  genuinely indeterminate in C++ if the port's control flow lets one path through.
+  Value-initialize it, and note in a `Wisp:` comment that upstream relies on the
+  invariant. That is strictly more defined than upstream and identical whenever the
+  invariant holds.
+- A labeled block that *yields* a value on every path but one, where that path is
+  `unreachable`, becomes a plain local plus an `assert`. `NDEBUG` drops the assert, so
+  the read of the unset value becomes reachable in exactly the build where it matters.
+
+Treat a `C4701` in ported code as a real finding, never as noise to silence.
+
+**Zig evaluates a `for (0..n)` range once.** Transliterating it into a C++ `for` whose
+condition re-reads a field the body mutates changes the trip count. This silently halved
+a loop in `search/pagelist.zig`'s tests — `page.size.rows` was re-read while `grow()`
+incremented it — and the test failed far from the cause. Snapshot the bound into a
+`const` before the loop. A Zig `while` with the same shape *is* re-evaluating, so leave
+those alone.
+
+**`test_helpers.h`'s `ASSERT_EQ` casts both sides to `long`**, which truncates a 64-bit
+pointer. Compare pointers with `ASSERT_TRUE(a == b)`.
+
 ## Verifying
 
 Configure and build (NMake, real Debug config), then run the suite:
