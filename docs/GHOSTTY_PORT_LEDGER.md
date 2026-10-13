@@ -13,15 +13,21 @@ License: MIT, (c) 2024 Mitchell Hashimoto and Ghostty contributors
 | | Files | Lines |
 |---|---:|---:|
 | Upstream `src/` (Zig) | 589 | 342401 |
-| Ported | - | 5370 |
-| Not applicable to a Windows port | - | 37082 |
-| Remaining | - | 299949 |
-| ...of which partially ported | - | 7471 |
+| Ported | - | 103096 |
+| Not applicable to this port | - | 59947 |
+| Remaining | - | 179358 |
+| ...of which partially ported | - | 0 |
 
 Status values: `todo`, `wip`, `done`, `n/a`. A `wip` file counts
 toward *remaining*, not ported — a partially ported file is not
 ported, and counting it as done would overstate progress by the
 whole file's length.
+
+`n/a` covers two cases: a module that does not apply to a Windows
+port at all (a GTK runtime, a Metal backend), and a module behind a
+build flag this port disables — `kitty_graphics`, `glyph_protocol`
+and `tmux_control_mode`. Neither will be ported, so neither counts
+toward *remaining*.
 
 ## Modules
 
@@ -78,60 +84,60 @@ whole file's length.
 
 | File | Lines | Status |
 |---|---:|---|
-| `terminal/PageList.zig` | 20542 | todo |
-| `terminal/Terminal.zig` | 16541 | todo |
-| `terminal/Screen.zig` | 12487 | todo |
-| `terminal/formatter.zig` | 7030 | todo |
-| `terminal/stream_terminal.zig` | 6604 | todo |
-| `terminal/stream.zig` | 5407 | todo |
-| `terminal/page.zig` | 4523 | wip |
+| `terminal/PageList.zig` | 20542 | done |
+| `terminal/Terminal.zig` | 16541 | done |
+| `terminal/Screen.zig` | 12487 | done |
+| `terminal/formatter.zig` | 7030 | done |
+| `terminal/stream_terminal.zig` | 6604 | done |
+| `terminal/stream.zig` | 5407 | done |
+| `terminal/page.zig` | 4523 | done |
 | `terminal/render.zig` | 2397 | todo |
-| `terminal/SelectionGesture.zig` | 2110 | todo |
+| `terminal/SelectionGesture.zig` | 2110 | done |
 | `terminal/hash_map.zig` | 1918 | done |
-| `terminal/Selection.zig` | 1676 | todo |
-| `terminal/color.zig` | 1468 | wip |
-| `terminal/style.zig` | 1240 | wip |
+| `terminal/Selection.zig` | 1676 | done |
+| `terminal/color.zig` | 1468 | done |
+| `terminal/style.zig` | 1240 | done |
 | `terminal/bitmap_allocator.zig` | 1221 | done |
-| `terminal/Parser.zig` | 1116 | todo |
+| `terminal/Parser.zig` | 1116 | done |
 | `terminal/sgr.zig` | 1114 | done |
-| `terminal/osc.zig` | 1074 | todo |
+| `terminal/osc.zig` | 1074 | done |
 | `terminal/ref_counted_set.zig` | 890 | done |
-| `terminal/apc.zig` | 766 | todo |
-| `terminal/stream_continuation.zig` | 606 | todo |
-| `terminal/dcs.zig` | 571 | todo |
-| `terminal/modes.zig` | 497 | todo |
-| `terminal/parse_table.zig` | 448 | todo |
+| `terminal/apc.zig` | 766 | done |
+| `terminal/stream_continuation.zig` | 606 | done |
+| `terminal/dcs.zig` | 571 | done |
+| `terminal/modes.zig` | 497 | done |
+| `terminal/parse_table.zig` | 448 | done |
 | `terminal/build_options.zig` | 333 | todo |
-| `terminal/Tabstops.zig` | 297 | todo |
-| `terminal/StringMap.zig` | 296 | todo |
-| `terminal/mem.zig` | 260 | todo |
-| `terminal/clipboard.zig` | 256 | todo |
-| `terminal/paste.zig` | 247 | todo |
-| `terminal/hyperlink.zig` | 240 | wip |
-| `terminal/device_attributes.zig` | 227 | todo |
+| `terminal/Tabstops.zig` | 297 | done |
+| `terminal/StringMap.zig` | 296 | done |
+| `terminal/mem.zig` | 260 | done |
+| `terminal/clipboard.zig` | 256 | done |
+| `terminal/paste.zig` | 247 | done |
+| `terminal/hyperlink.zig` | 240 | done |
+| `terminal/device_attributes.zig` | 227 | done |
 | `terminal/size.zig` | 227 | done |
-| `terminal/highlight.zig` | 213 | todo |
-| `terminal/mouse.zig` | 169 | todo |
-| `terminal/size_report.zig` | 160 | todo |
-| `terminal/ScreenSet.zig` | 154 | todo |
-| `terminal/device_status.zig` | 144 | todo |
-| `terminal/UTF8Decoder.zig` | 142 | todo |
-| `terminal/fraction.zig` | 142 | todo |
-| `terminal/charsets.zig` | 115 | todo |
-| `terminal/point.zig` | 112 | todo |
-| `terminal/ansi.zig` | 109 | todo |
-| `terminal/x11_color.zig` | 107 | todo |
+| `terminal/highlight.zig` | 213 | done |
+| `terminal/mouse.zig` | 169 | done |
+| `terminal/size_report.zig` | 160 | done |
+| `terminal/ScreenSet.zig` | 154 | done |
+| `terminal/device_status.zig` | 144 | done |
+| `terminal/UTF8Decoder.zig` | 142 | done |
+| `terminal/fraction.zig` | 142 | done |
+| `terminal/charsets.zig` | 115 | done |
+| `terminal/point.zig` | 112 | done |
+| `terminal/ansi.zig` | 109 | done |
+| `terminal/x11_color.zig` | 107 | done |
 | `terminal/main.zig` | 104 | todo |
-| `terminal/sys.zig` | 102 | todo |
-| `terminal/csi.zig` | 55 | todo |
-| `terminal/focus.zig` | 39 | todo |
-| `terminal/selection_codepoints.zig` | 31 | todo |
-| `terminal/cursor.zig` | 25 | todo |
+| `terminal/sys.zig` | 102 | done |
+| `terminal/csi.zig` | 55 | done |
+| `terminal/focus.zig` | 39 | done |
+| `terminal/selection_codepoints.zig` | 31 | done |
+| `terminal/cursor.zig` | 25 | done |
 | `terminal/lib.zig` | 24 | todo |
 | `terminal/search.zig` | 23 | todo |
-| `terminal/kitty.zig` | 17 | todo |
-| `terminal/compress.zig` | 15 | todo |
-| `terminal/tmux.zig` | 13 | todo |
+| `terminal/kitty.zig` | 17 | done |
+| `terminal/compress.zig` | 15 | done |
+| `terminal/tmux.zig` | 13 | n/a |
 
 ### `apprt/gtk`
 
@@ -201,7 +207,7 @@ _Not applicable: Linux GTK application runtime._
 |---|---:|---|
 | `terminal/c/terminal.zig` | 6266 | todo |
 | `terminal/c/render.zig` | 2570 | todo |
-| `terminal/c/kitty_graphics.zig` | 2138 | todo |
+| `terminal/c/kitty_graphics.zig` | 2138 | n/a |
 | `terminal/c/snapshot.zig` | 1527 | todo |
 | `terminal/c/selection_gesture.zig` | 1490 | todo |
 | `terminal/c/types.zig` | 1174 | todo |
@@ -237,28 +243,28 @@ _Not applicable: Linux GTK application runtime._
 
 | File | Lines | Status |
 |---|---:|---|
-| `terminal/kitty/graphics_storage.zig` | 4664 | todo |
-| `terminal/kitty/graphics_exec.zig` | 3603 | todo |
-| `terminal/kitty/graphics_image.zig` | 2161 | todo |
-| `terminal/kitty/graphics_command.zig` | 1872 | todo |
-| `terminal/kitty/graphics_unicode.zig` | 1349 | todo |
-| `terminal/kitty/dnd_drop.zig` | 715 | todo |
-| `terminal/kitty/clipboard_write.zig` | 698 | todo |
-| `terminal/kitty/dnd_test.zig` | 626 | todo |
-| `terminal/kitty/clipboard_command.zig` | 502 | todo |
-| `terminal/kitty/clipboard_response.zig` | 469 | todo |
-| `terminal/kitty/dnd_command.zig` | 436 | todo |
+| `terminal/kitty/graphics_storage.zig` | 4664 | n/a |
+| `terminal/kitty/graphics_exec.zig` | 3603 | n/a |
+| `terminal/kitty/graphics_image.zig` | 2161 | n/a |
+| `terminal/kitty/graphics_command.zig` | 1872 | n/a |
+| `terminal/kitty/graphics_unicode.zig` | 1349 | n/a |
+| `terminal/kitty/dnd_drop.zig` | 715 | done |
+| `terminal/kitty/clipboard_write.zig` | 698 | done |
+| `terminal/kitty/dnd_test.zig` | 626 | done |
+| `terminal/kitty/clipboard_command.zig` | 502 | done |
+| `terminal/kitty/clipboard_response.zig` | 469 | done |
+| `terminal/kitty/dnd_command.zig` | 436 | done |
 | `terminal/kitty/windows.zig` | 277 | todo |
-| `terminal/kitty/dnd_response.zig` | 248 | todo |
-| `terminal/kitty/clipboard_grants.zig` | 238 | todo |
-| `terminal/kitty/graphics_pixel.zig` | 235 | todo |
-| `terminal/kitty/key.zig` | 169 | todo |
-| `terminal/kitty/graphics_animation.zig` | 149 | todo |
-| `terminal/kitty/color.zig` | 98 | todo |
-| `terminal/kitty/clipboard.zig` | 82 | todo |
-| `terminal/kitty/dnd.zig` | 69 | todo |
-| `terminal/kitty/graphics.zig` | 36 | todo |
-| `terminal/kitty/graphics_render.zig` | 27 | todo |
+| `terminal/kitty/dnd_response.zig` | 248 | done |
+| `terminal/kitty/clipboard_grants.zig` | 238 | done |
+| `terminal/kitty/graphics_pixel.zig` | 235 | n/a |
+| `terminal/kitty/key.zig` | 169 | done |
+| `terminal/kitty/graphics_animation.zig` | 149 | n/a |
+| `terminal/kitty/color.zig` | 98 | done |
+| `terminal/kitty/clipboard.zig` | 82 | done |
+| `terminal/kitty/dnd.zig` | 69 | done |
+| `terminal/kitty/graphics.zig` | 36 | n/a |
+| `terminal/kitty/graphics_render.zig` | 27 | n/a |
 
 ### `config`
 
@@ -459,13 +465,13 @@ _Not applicable: Linux GTK application runtime._
 | `terminal/osc/parsers/kitty_dnd_protocol.zig` | 138 | todo |
 | `terminal/osc/parsers/clipboard_operation.zig` | 122 | todo |
 | `terminal/osc/parsers/change_window_title.zig` | 119 | todo |
-| `terminal/osc/kitty_metadata.zig` | 94 | todo |
+| `terminal/osc/kitty_metadata.zig` | 94 | done |
 | `terminal/osc/parsers/rxvt_extension.zig` | 59 | todo |
 | `terminal/osc/parsers/report_pwd.zig` | 48 | todo |
 | `terminal/osc/parsers/mouse_shape.zig` | 39 | todo |
-| `terminal/osc/encoding.zig` | 38 | todo |
+| `terminal/osc/encoding.zig` | 38 | done |
 | `terminal/osc/parsers/change_window_icon.zig` | 33 | todo |
-| `terminal/osc/parsers.zig` | 23 | todo |
+| `terminal/osc/parsers.zig` | 23 | done |
 
 ### `termio`
 
@@ -486,12 +492,12 @@ _Not applicable: Linux GTK application runtime._
 | File | Lines | Status |
 |---|---:|---|
 | `terminal/search/screen.zig` | 2126 | todo |
-| `terminal/search/sliding_window.zig` | 1798 | todo |
+| `terminal/search/sliding_window.zig` | 1798 | done |
 | `terminal/search/terminal.zig` | 767 | todo |
 | `terminal/search/Thread.zig` | 681 | todo |
-| `terminal/search/pagelist.zig` | 621 | todo |
-| `terminal/search/viewport.zig` | 449 | todo |
-| `terminal/search/active.zig` | 177 | todo |
+| `terminal/search/pagelist.zig` | 621 | done |
+| `terminal/search/viewport.zig` | 449 | done |
+| `terminal/search/active.zig` | 177 | done |
 
 ### `font/sprite`
 
@@ -645,10 +651,10 @@ _Not applicable: Zig build system plumbing._
 
 | File | Lines | Status |
 |---|---:|---|
-| `terminal/tmux/viewer.zig` | 2290 | todo |
-| `terminal/tmux/control.zig` | 839 | todo |
-| `terminal/tmux/layout.zig` | 638 | todo |
-| `terminal/tmux/output.zig` | 584 | todo |
+| `terminal/tmux/viewer.zig` | 2290 | n/a |
+| `terminal/tmux/control.zig` | 839 | n/a |
+| `terminal/tmux/layout.zig` | 638 | n/a |
+| `terminal/tmux/output.zig` | 584 | n/a |
 
 ### `benchmark`
 
@@ -700,11 +706,11 @@ _Not applicable: upstream micro-benchmarks._
 
 | File | Lines | Status |
 |---|---:|---|
-| `terminal/apc/glyph/request.zig` | 874 | todo |
-| `terminal/apc/glyph/Glossary.zig` | 515 | todo |
-| `terminal/apc/glyph/execute.zig` | 367 | todo |
-| `terminal/apc/glyph/response.zig` | 346 | todo |
-| `terminal/apc/glyph.zig` | 165 | todo |
+| `terminal/apc/glyph/request.zig` | 874 | n/a |
+| `terminal/apc/glyph/Glossary.zig` | 515 | n/a |
+| `terminal/apc/glyph/execute.zig` | 367 | n/a |
+| `terminal/apc/glyph/response.zig` | 346 | n/a |
+| `terminal/apc/glyph.zig` | 165 | n/a |
 
 ### `renderer/metal`
 
@@ -735,9 +741,9 @@ _Not applicable: Apple Metal backend._
 
 | File | Lines | Status |
 |---|---:|---|
-| `terminal/compress/lz4.zig` | 891 | todo |
-| `terminal/compress/lz4_differential.zig` | 493 | todo |
-| `terminal/compress/Page.zig` | 412 | todo |
+| `terminal/compress/lz4.zig` | 891 | done |
+| `terminal/compress/lz4_differential.zig` | 493 | done |
+| `terminal/compress/Page.zig` | 412 | done |
 
 ### `lib`
 

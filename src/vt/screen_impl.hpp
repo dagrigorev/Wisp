@@ -1647,10 +1647,52 @@ inline PageList::IncreaseCapacityError Screen::cursorSetHyperlink() {
     return PageList::IncreaseCapacityError::none;
 }
 
-/* selection_codepoints.zig: default_line_whitespace */
+/* selection_codepoints.zig
+ *
+ * This file contains various default word boundaries used for
+ * selection logic. We put it in a separate file so that different
+ * subsystems can import it without introducing a number of
+ * dependencies.
+ *
+ * Wisp: upstream's own file; it is small enough that the port keeps it here,
+ * beside its only consumer. */
 namespace selection_codepoints {
+
+/* Default boundary characters for word selection: ` \t'"│`|:;,()[]{}<>$` */
+static const uint32_t default_word_boundaries[] = {
+    0,       /* null */
+    ' ',     /* space */
+    '\t',    /* tab */
+    '\'',    /* single quote */
+    '"',     /* double quote */
+    0x2502,  /* U+2502 box drawing */
+    '`',     /* backtick */
+    '|',     /* pipe */
+    ':',     /* colon */
+    ';',     /* semicolon */
+    ',',     /* comma */
+    '(',     /* left paren */
+    ')',     /* right paren */
+    '[',     /* left bracket */
+    ']',     /* right bracket */
+    '{',     /* left brace */
+    '}',     /* right brace */
+    '<',     /* less than */
+    '>',     /* greater than */
+    '$',     /* dollar */
+};
+
+/* Wisp: the array length, which upstream reads as `.len`. */
+static const size_t default_word_boundaries_len =
+    sizeof(default_word_boundaries) / sizeof(default_word_boundaries[0]);
+
+/* Default whitespace characters trimmed from line selections. */
 static const uint32_t default_line_whitespace[] = {0, ' ', '\t'};
-}
+
+static const size_t default_line_whitespace_len =
+    sizeof(default_line_whitespace) / sizeof(default_line_whitespace[0]);
+
+}  // namespace selection_codepoints
 
 inline Screen::SelectLine::SelectLine(const Pin &p)
     : pin(p), whitespace(selection_codepoints::default_line_whitespace), whitespace_len(3),
