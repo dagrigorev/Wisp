@@ -183,8 +183,12 @@ void renderer_paint_region(Renderer *r, const ScreenBuffer *sb, const RECT *rect
 
     int rows = sb->rows < max_rows ? sb->rows : max_rows;
     int cols = sb->cols < max_cols ? sb->cols : max_cols;
-    float ox = (float)rect->left + (float)r->padding_x;
-    float oy = (float)rect->top  + (float)r->padding_y;
+    /* Whole pixels: cell_w/cell_h are integral, so an integral origin keeps
+     * every cell on the pixel grid. A fractional origin would put each column
+     * on its own subpixel phase and bring back the uneven glyph spacing and
+     * soft background edges that integral cell metrics are there to avoid. */
+    float ox = floorf((float)rect->left + (float)r->padding_x);
+    float oy = floorf((float)rect->top  + (float)r->padding_y);
     wchar_t wch[4];
 
     bool *search_mask = NULL;

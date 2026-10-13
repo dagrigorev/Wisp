@@ -41,7 +41,12 @@ void config_defaults(Config *cfg) {
     strcpy(cfg->general.title, "Wisp - ${cwd}");
 
     /* Font */
-    wcscpy(cfg->font.family, L"Cascadia Code");
+    /* A Nerd Font by default: prompts such as oh-my-posh draw their
+     * separators with private-use codepoints (U+E0B0 and neighbours), and
+     * DirectWrite cannot fall back for those — no font claims the private use
+     * area, so a font without them renders .notdef boxes. font.cpp falls back
+     * to Cascadia Code and then Consolas if this one is not installed. */
+    wcscpy(cfg->font.family, L"GeistMono NF");
     cfg->font.size          = 13.0f;
     cfg->font.ligatures     = true;
     cfg->font.bold_is_bright = true;
