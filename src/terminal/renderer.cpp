@@ -121,6 +121,15 @@ void renderer_resize(Renderer *r, int w, int h) {
 }
 
 
+void renderer_grid_size(const Renderer *r, int width_px, int height_px, int *cols, int *rows) {
+    const TerminalGridLayout layout =
+        terminal_compute_grid_layout_ex(width_px, height_px, r->cell_w, r->cell_h,
+                                        r->padding_x, r->padding_y, 0, 0, 0, 0);
+    if (cols) *cols = layout.cols > 0 ? layout.cols : 1;
+    if (rows) *rows = layout.rows > 0 ? layout.rows : 1;
+}
+
+
 /* Convert window pixel coords to cell col/row (-1 if outside grid) */
 void renderer_pixel_to_cell(const Renderer *r, int px, int py, int *col, int *row) {
     TerminalGridLayout layout = {0};
@@ -176,10 +185,10 @@ void renderer_paint_region(Renderer *r, const ScreenBuffer *sb, const RECT *rect
     r->bg_brush->SetColor(bgc);
     r->render_target->FillRectangle(clip, r->bg_brush);
 
-    int max_cols = (int)((pane_w - (float)(r->padding_x * 2)) / r->cell_w);
-    int max_rows = (int)((pane_h - (float)(r->padding_y * 2)) / r->cell_h);
-    if (max_cols < 1) max_cols = 1;
-    if (max_rows < 1) max_rows = 1;
+    /* The same grid the terminal was sized to. Computing it differently here
+     * is how the bottom row stopped being painted. */
+    int max_cols = 1, max_rows = 1;
+    renderer_grid_size(r, (int)pane_w, (int)pane_h, &max_cols, &max_rows);
 
     int rows = sb->rows < max_rows ? sb->rows : max_rows;
     int cols = sb->cols < max_cols ? sb->cols : max_cols;
