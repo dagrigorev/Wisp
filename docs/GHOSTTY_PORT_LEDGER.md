@@ -13,9 +13,9 @@ License: MIT, (c) 2024 Mitchell Hashimoto and Ghostty contributors
 | | Files | Lines |
 |---|---:|---:|
 | Upstream `src/` (Zig) | 589 | 342401 |
-| Ported | - | 103096 |
-| Not applicable to this port | - | 59947 |
-| Remaining | - | 179358 |
+| Ported | - | 106012 |
+| Not applicable to this port | - | 60628 |
+| Remaining | - | 175761 |
 | ...of which partially ported | - | 0 |
 
 Status values: `todo`, `wip`, `done`, `n/a`. A `wip` file counts
@@ -134,7 +134,7 @@ toward *remaining*.
 | `terminal/selection_codepoints.zig` | 31 | done |
 | `terminal/cursor.zig` | 25 | done |
 | `terminal/lib.zig` | 24 | todo |
-| `terminal/search.zig` | 23 | todo |
+| `terminal/search.zig` | 23 | done |
 | `terminal/kitty.zig` | 17 | done |
 | `terminal/compress.zig` | 15 | done |
 | `terminal/tmux.zig` | 13 | n/a |
@@ -491,10 +491,10 @@ _Not applicable: Linux GTK application runtime._
 
 | File | Lines | Status |
 |---|---:|---|
-| `terminal/search/screen.zig` | 2126 | todo |
+| `terminal/search/screen.zig` | 2126 | done |
 | `terminal/search/sliding_window.zig` | 1798 | done |
-| `terminal/search/terminal.zig` | 767 | todo |
-| `terminal/search/Thread.zig` | 681 | todo |
+| `terminal/search/terminal.zig` | 767 | done |
+| `terminal/search/Thread.zig` | 681 | n/a |
 | `terminal/search/pagelist.zig` | 621 | done |
 | `terminal/search/viewport.zig` | 449 | done |
 | `terminal/search/active.zig` | 177 | done |
