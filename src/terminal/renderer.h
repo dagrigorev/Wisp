@@ -98,6 +98,14 @@ void renderer_set_font(Renderer *r, const wchar_t *family, float pt_size);
 void renderer_update_dpi(Renderer *r, float dpi);
 void renderer_toggle_cursor_blink(Renderer *r);
 void renderer_pixel_to_cell(const Renderer *r, int px, int py, int *col, int *row);
+
+/* The grid that fits in a pane of this pixel size, in cells.
+ *
+ * Everything that needs a row or column count must go through this: the
+ * terminal is sized by it and the painter clamps to it, and when those two
+ * disagreed by the padding the bottom row existed in the model but was never
+ * drawn -- taking the cursor with it whenever it sat there. */
+void renderer_grid_size(const Renderer *r, int width_px, int height_px, int *cols, int *rows);
 void renderer_destroy(Renderer *r);
 
 /* Map a 24-bit RGB color to Color4F */

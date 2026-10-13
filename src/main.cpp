@@ -252,8 +252,8 @@ static bool pane_start(Pane *pane) {
     int cols = g_renderer.cols > 0 ? g_renderer.cols : 80;
     int rows = g_renderer.rows > 0 ? g_renderer.rows : 24;
     if (rc.right > rc.left && rc.bottom > rc.top && g_renderer.cell_w > 0.0f) {
-        cols = (int)((rc.right - rc.left) / g_renderer.cell_w);
-        rows = (int)((rc.bottom - rc.top) / g_renderer.cell_h);
+        renderer_grid_size(&g_renderer, (int)(rc.right - rc.left), (int)(rc.bottom - rc.top),
+                           &cols, &rows);
     }
     if (cols < 1) cols = 1;
     if (rows < 1) rows = 1;
@@ -385,10 +385,13 @@ static void pane_apply_rect(Pane *p, RECT rc) {
     p->rect = rc;
     if (!p->initialized || g_renderer.cell_w <= 0.0f) return;
 
-    int cols = (int)((rc.right - rc.left) / g_renderer.cell_w);
-    int rows = (int)((rc.bottom - rc.top) / g_renderer.cell_h);
-    if (cols < 1) cols = 1;
-    if (rows < 1) rows = 1;
+    /* Must match what the painter will draw, so the grid comes from the one
+     * function both use. Sizing the terminal without the padding the painter
+     * subtracts gave it a bottom row that was never painted, and the cursor
+     * vanished whenever it reached that row. */
+    int cols = 1, rows = 1;
+    renderer_grid_size(&g_renderer, (int)(rc.right - rc.left), (int)(rc.bottom - rc.top),
+                       &cols, &rows);
     if (cols == p->term.view.cols && rows == p->term.view.rows) return;
 
     EnterCriticalSection(&g_lock);
