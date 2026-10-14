@@ -17,8 +17,13 @@
  * implementations.
  *
  * Wisp, differences in shape rather than behavior:
- *   - decode_png and the Kitty graphics image types are not ported; this
- *     build sets kitty_graphics = false.
+ *   - decode_png is declared and left null, which is upstream's own
+ *     configuration for its `.lib` artifact (`build_options.artifact ==
+ *     .lib`). `decodePngWuffs` is not ported — there is no Wuffs here —
+ *     so PNG transmission yields error.UnsupportedFormat, exactly as
+ *     upstream's null hook does. `DecodeError!Image` is a DecodeError
+ *     return with the Image through an out parameter, and `[]const u8` /
+ *     `[]u8` are a pointer plus a length.
  *   - There is no std.Io, so randomSecure takes only the buffer and the
  *     default source is the platform CSPRNG rather than an Io.
  */
@@ -30,9 +35,44 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "../zigstd/allocator.hpp"
+
 namespace wisp {
 namespace terminal {
 namespace sys {
+
+/* Wisp: `Allocator.Error || error{InvalidData}`. */
+enum class DecodeError : uint8_t {
+    none,
+    OutOfMemory,
+    InvalidData,
+};
+
+/* The result of decoding an image. The caller owns the returned data
+ * and must free it with the same allocator that was passed to the
+ * decode function. */
+struct Image {
+    uint32_t width;
+    uint32_t height;
+    uint8_t *data;
+    size_t data_len;
+
+    Image() : width(0), height(0), data(nullptr), data_len(0) {}
+};
+
+typedef DecodeError (*DecodePngFn)(::wisp::zigstd::Allocator alloc, const uint8_t *data,
+                                   size_t data_len, Image *out);
+
+/* Decode PNG data into RGBA pixels. If null, PNG decoding is unsupported
+ * and the exact semantics are up to callers. For example, the Kitty Graphics
+ * Protocol will work but cannot accept PNG images.
+ *
+ * Wisp: a `pub var` is a function returning a reference to the storage,
+ * as random_secure below is. It is null here; see the header note. */
+inline DecodePngFn &decode_png() {
+    static DecodePngFn f = nullptr;
+    return f;
+}
 
 enum class RandomSecureError : uint8_t {
     none,
