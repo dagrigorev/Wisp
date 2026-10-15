@@ -5,9 +5,10 @@
  * Upstream's tests: same inputs, same assertions, same names. Built with
  * WISP_IS_TEST and WISP_SLOW_RUNTIME_SAFETY, as upstream's tests run.
  *
- * Wisp: the tests upstream gates on build_options.kitty_graphics or
- * build_options.glyph_protocol are not ported, matching the build
- * configuration of src/vt/terminal.hpp.
+ * Wisp: the tests upstream gates on build_options.glyph_protocol are not
+ * ported, matching the build configuration of src/vt/terminal.hpp. The two
+ * gated on build_options.kitty_graphics are ported, now that the Kitty
+ * graphics storage is.
  */
 
 #include <string.h>
@@ -18,6 +19,7 @@
 #include "res/glitch.inc"
 #include "../vt/terminal.hpp"
 #include "../vt/formatter.hpp"
+#include "../terminal/kitty/graphics_unicode.hpp"
 #include "../zigstd/random.hpp"
 
 using namespace wisp;
@@ -2531,8 +2533,22 @@ TEST(terminal, Terminal__print_invoke_charset_single) {
     }
 }
 
-/* Wisp: upstream test "Terminal__print_kitty_unicode_placeholder" is gated on build_options.kitty_graphics, which this
- * build disables; not ported. */
+TEST(terminal, Terminal__print_kitty_unicode_placeholder) {
+    TERM(t, 10, 10);
+
+    ASSERT_TRUE(t.print(terminal::kitty::graphics::graphics_unicode::placeholder));
+    ASSERT_TRUE(0 == t.screens.active->cursor.y);
+    ASSERT_TRUE(1 == t.screens.active->cursor.x);
+
+    {
+        const PageList::Cell list_cell = t.screens.active->pages.getCell(Point::screen(0, 0)).value;
+        const Cell *cell = list_cell.cell;
+        ASSERT_TRUE(terminal::kitty::graphics::graphics_unicode::placeholder == cell->contentCodepoint());
+        ASSERT_TRUE(list_cell.row->kitty_virtual_placeholder());
+    }
+
+    ASSERT_TRUE(t.isDirty(Point::screen(0, 0)));
+}
 
 
 TEST(terminal, Terminal__soft_wrap) {
@@ -9479,8 +9495,37 @@ TEST(terminal, Terminal__fullReset_status_display) {
     ASSERT_TRUE(t.status_display == terminal::ansi::StatusDisplay::main);
 }
 
-/* Wisp: upstream test "Terminal__fullReset_preserves_kitty_graphics_limits" is gated on build_options.kitty_graphics, which this
- * build disables; not ported. */
+TEST(terminal, Terminal__fullReset_preserves_kitty_graphics_limits) {
+    const zigstd::Allocator alloc = talloc();
+    static const char temp_dir[] = "/tmp/ghostty-kitty-images";
+
+    Terminal::Options t_opts((size::CellCountInt)10, (size::CellCountInt)10);
+    TermHolder t_holder(alloc, t_opts);
+    ASSERT_TRUE(t_holder.ok);
+    Terminal &t = t_holder.t;
+
+    t.setKittyGraphicsLoadingLimits(terminal::kitty::graphics_image::LoadingImage::Limits::allWithTempDir(
+        temp_dir, sizeof(temp_dir) - 1));
+    static const size_t total_limits[] = {1234, 0};
+    for (size_t i = 0; i < sizeof(total_limits) / sizeof(total_limits[0]); i += 1) {
+        const size_t total_limit = total_limits[i];
+        t.setKittyGraphicsSizeLimit(alloc, total_limit);
+        t.fullReset();
+
+        const terminal::kitty::graphics_storage::ImageStorage *storage = &t.screens.active->kitty_images;
+        ASSERT_TRUE(total_limit == storage->total_limit);
+        ASSERT_TRUE(storage->image_limits.file);
+        ASSERT_TRUE(storage->image_limits.shared_memory);
+        /* Wisp: upstream switches on the `temporary_file` union; the port
+         * carries the tag as `temporary_file_enabled` beside the slice, and
+         * the `.disabled` arm's error.TestUnexpectedResult is this assert. */
+        ASSERT_TRUE(storage->image_limits.temporary_file_enabled);
+        {
+            EXPECT_STR(temp_dir, std::string(storage->image_limits.temporary_file_directory,
+                                             storage->image_limits.temporary_file_directory_len));
+        }
+    }
+}
 
 
 TEST(terminal, Terminal__fullReset_clears_alt_screen_kitty_keyboard_state) {

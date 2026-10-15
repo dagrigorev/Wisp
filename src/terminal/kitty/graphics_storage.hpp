@@ -91,16 +91,24 @@
  *     names `ImageStorage`, which is still incomplete there, so its body
  *     is defined after the struct. Order within each group is upstream's.
  *
- * Wisp, the one behavioral note:
+ * Wisp, the include order:
  *
- *   - `scrollMarginsBegin` opens with `assert(self == &s.kitty_images)`.
- *     Wisp's `Screen` carries no `kitty_images` member (it is ported in
- *     upstream's `kitty_graphics == false` shape, see screen.hpp), so
- *     that assert has no counterpart and is omitted with this note. The
- *     method still derives the screen from the terminal exactly as
- *     upstream does, so a caller whose storage is not the active
- *     screen's is as wrong here as it is upstream — just not asserted.
- *     Connecting `ImageStorage` into `Screen` is a separate change.
+ *   - `Screen` carries `kitty_images` by value, so screen.hpp includes
+ *     this header and this header cannot include screen.hpp or
+ *     terminal.hpp. `Screen` and `Terminal` are only forward-declared
+ *     here, so every method that dereferences one is declared here and
+ *     defined out of line, exactly as `PendingImage::complete` already
+ *     was for `ImageStorage` itself:
+ *
+ *       - the `Screen`-only bodies live in
+ *         graphics_storage_screen_impl.hpp, which screen.hpp includes at
+ *         its end (where `Screen` is complete);
+ *       - the `Terminal` bodies live in graphics_storage_impl.hpp, which
+ *         terminal.hpp includes at its end (where both are complete).
+ *
+ *     Nothing else moved: declaration order, bodies and comments are
+ *     unchanged. A consumer of this subsystem includes
+ *     graphics_storage_impl.hpp, which pulls in everything.
  *
  * Wisp, the external seam:
  *
@@ -125,9 +133,7 @@
 
 #include "../../vt/page_list.hpp"
 #include "../../vt/point.hpp"
-#include "../../vt/screen.hpp"
 #include "../../vt/size.hpp"
-#include "../../vt/terminal.hpp"
 #include "../../zigstd/allocator.hpp"
 #include "../../zigstd/array_list.hpp"
 #include "graphics_animation.hpp"
@@ -136,6 +142,17 @@
 #include "graphics_pixel.hpp"
 
 namespace wisp {
+namespace vt {
+
+/* Wisp: screen.hpp includes this header so that `Screen` can carry
+ * `kitty_images` by value, so this header cannot include screen.hpp (nor
+ * terminal.hpp, which completes `Screen`). `Screen` and `Terminal` are
+ * therefore incomplete here; see the include-order note at the top. */
+struct Screen;
+struct Terminal;
+
+} /* namespace vt */
+
 namespace terminal {
 namespace kitty {
 namespace graphics_storage {
@@ -580,13 +597,7 @@ struct ImageStorage {
             : location(), x_offset(0), y_offset(0), source_x(0), source_y(0), source_width(0),
               source_height(0), columns(0), rows(0), z(0) {}
 
-        void deinit(Screen *s) const {
-            switch (location.tag) {
-            case Location::Tag::pin: s->pages.untrackPin(location.pin); break;
-            case Location::Tag::virtual_:
-            case Location::Tag::relative: break;
-            }
-        }
+        void deinit(Screen *s) const;
 
         /* Multiply two protocol-controlled values without allowing them to
          * wrap. Placement geometry is exposed as u32, so values larger than
@@ -646,15 +657,7 @@ struct ImageStorage {
         /* Returns the placement offset clamped within the first cell. Pixel
          * geometry may temporarily be unavailable, in which case there is no
          * valid offset within the cell. */
-        CellOffset cellOffset(const Terminal *t) const {
-            const uint32_t cell_width = t->width_px / t->cols;
-            const uint32_t cell_height = t->height_px / t->rows;
-
-            CellOffset r;
-            r.x = cell_width > 0 ? (x_offset < cell_width - 1 ? x_offset : cell_width - 1) : 0;
-            r.y = cell_height > 0 ? (y_offset < cell_height - 1 ? y_offset : cell_height - 1) : 0;
-            return r;
-        }
+        CellOffset cellOffset(const Terminal *t) const;
 
         struct PixelSize {
             uint32_t width;
@@ -666,70 +669,7 @@ struct ImageStorage {
         /* Returns the size of this placement's image in pixels,
          * taking into account the source rectangle, specified
          * rows/columns, and aspect ratio. */
-        PixelSize pixelSize(const Image &image, const Terminal *t) const {
-            const SourceRect source = sourceRect(image);
-            const uint32_t width = source.width;
-            const uint32_t height = source.height;
-
-            PixelSize out;
-
-            /* If we don't have any specified cols or rows then the placement
-             * should be the native size of the image, and doesn't need to be
-             * re-scaled. */
-            if (columns == 0 && rows == 0) {
-                out.width = width;
-                out.height = height;
-                return out;
-            }
-
-            /* We calculate the size of a cell so that we can multiply
-             * it by the specified cols/rows to get the correct px size.
-             *
-             * We assume that the width is divided evenly by the column
-             * count and the height by the row count, because it should be. */
-            const uint32_t cell_width = t->width_px / t->cols;
-            const uint32_t cell_height = t->height_px / t->rows;
-            const CellOffset cell_offset = cellOffset(t);
-
-            /* If we have a specified cols AND rows then we calculate
-             * the width and height from them directly, we don't need
-             * to adjust for aspect ratio. */
-            if (columns > 0 && rows > 0) {
-                const uint32_t calc_width = saturatingMul(cell_width, columns);
-                const uint32_t calc_height = saturatingMul(cell_height, rows);
-
-                out.width = satSubU32(calc_width, cell_offset.x);
-                out.height = satSubU32(calc_height, cell_offset.y);
-                return out;
-            }
-
-            /* Either the columns or the rows were specified, but not both,
-             * so we need to calculate the other one based on the aspect ratio. */
-
-            /* If only the columns were specified, we determine
-             * the height of the image based on the aspect ratio. */
-            if (columns > 0) {
-                const uint32_t calc_width =
-                    satSubU32(saturatingMul(cell_width, columns), cell_offset.x);
-                const uint32_t calc_height = scaleDimension(calc_width, height, width);
-
-                out.width = calc_width;
-                out.height = calc_height;
-                return out;
-            }
-
-            /* Otherwise, only the rows were specified, so we
-             * determine the width based on the aspect ratio. */
-            {
-                const uint32_t calc_height =
-                    satSubU32(saturatingMul(cell_height, rows), cell_offset.y);
-                const uint32_t calc_width = scaleDimension(calc_height, width, height);
-
-                out.width = calc_width;
-                out.height = calc_height;
-                return out;
-            }
-        }
+        PixelSize pixelSize(const Image &image, const Terminal *t) const;
 
         struct GridSize {
             uint32_t cols;
@@ -739,38 +679,7 @@ struct ImageStorage {
         };
 
         /* Returns the size in grid cells that this placement takes up. */
-        GridSize gridSize(const Image &image, const Terminal *t) const {
-            GridSize out;
-
-            /* If we have a specified columns and rows then this is trivial. */
-            if (columns > 0 && rows > 0) {
-                out.cols = columns;
-                out.rows = rows;
-                return out;
-            }
-
-            /* Otherwise we calculate the pixel size, divide by
-             * cell size, and round up to the nearest integer. */
-            const PixelSize calc_size = pixelSize(image, t);
-            const CellOffset cell_offset = cellOffset(t);
-            const uint32_t cell_width = t->width_px / t->cols;
-            const uint32_t cell_height = t->height_px / t->rows;
-            /* Wisp: `std.math.divCeil(u32, a, b) catch 0`. The numerator can
-             * be maxInt(u32) after saturation, so the +b-1 is done in u64. */
-            out.cols = cell_width == 0
-                           ? 0
-                           : (uint32_t)(((uint64_t)satAddU32(calc_size.width, cell_offset.x) +
-                                         (uint64_t)cell_width - 1) /
-                                        (uint64_t)cell_width);
-            out.rows = cell_height == 0
-                           ? 0
-                           : (uint32_t)(((uint64_t)satAddU32(calc_size.height, cell_offset.y) +
-                                         (uint64_t)cell_height - 1) /
-                                        (uint64_t)cell_height);
-            return out;
-            /* NOTE: Above `divCeil`s can only fail if the cell size is 0,
-             *       in such a case it seems safe to return 0 for this. */
-        }
+        GridSize gridSize(const Image &image, const Terminal *t) const;
 
         /* Permanently clip `count` rows off the top of this placement,
          * which currently spans `span` grid rows, by shrinking the
@@ -780,55 +689,10 @@ struct ImageStorage {
          * Requires 0 < count < span. Returns false if no visible
          * source pixels would remain, in which case the placement is
          * unmodified and should be deleted. */
-        bool clipTop(const Image &image, const Terminal *t, uint32_t count, uint32_t span) {
-            assert(count > 0 && count < span);
-            const SourceRect src = sourceRect(image);
-            const uint32_t crop =
-                rows > 0
-                    /* Scaled placement: each grid row shows an equal
-                     * fraction of the source. */
-                    ? (uint32_t)((uint64_t)src.height * (uint64_t)count / (uint64_t)span)
-                    /* Native size: each grid row shows one cell height of
-                     * source pixels (kitty does the same). */
-                    : saturatingMul(t->height_px / t->rows, count);
-            if (crop >= src.height) return false;
-            source_x = src.x;
-            source_y = src.y + crop;
-            source_width = src.width;
-            source_height = src.height - crop;
-            if (rows > 0) rows -= count;
-            return true;
-        }
+        bool clipTop(const Image &image, const Terminal *t, uint32_t count, uint32_t span);
 
         /* clipTop, but clipping `count` rows off the bottom. */
-        bool clipBottom(const Image &image, const Terminal *t, uint32_t count, uint32_t span) {
-            assert(count > 0 && count < span);
-            const SourceRect src = sourceRect(image);
-            /* An empty source can never be clipped smaller. This also
-             * guarantees we never store an explicit zero source height,
-             * which would be reinterpreted as "full image". */
-            if (src.height == 0) return false;
-            if (rows > 0) {
-                const uint32_t crop =
-                    (uint32_t)((uint64_t)src.height * (uint64_t)count / (uint64_t)span);
-                if (crop >= src.height) return false;
-                source_height = src.height - crop;
-                rows -= count;
-            } else {
-                /* The remaining rows can show this many source pixels,
-                 * with the first cell losing cellOffset pixels to the
-                 * placement's y offset. */
-                const uint32_t visible = saturatingMul(t->height_px / t->rows, span - count);
-                const uint32_t offset = cellOffset(t).y;
-                if (visible <= offset) return false;
-                const uint32_t avail = visible - offset;
-                source_height = src.height < avail ? src.height : avail;
-            }
-            source_x = src.x;
-            source_y = src.y;
-            source_width = src.width;
-            return true;
-        }
+        bool clipBottom(const Image &image, const Terminal *t, uint32_t count, uint32_t span);
 
         /* Returns a selection of the entire rectangle this placement
          * occupies within the screen. This can return null for a virtual
@@ -840,39 +704,7 @@ struct ImageStorage {
          * They are instead removed when their parent chain is removed.
          *
          * Wisp: `?Rect` is a bool return plus an out parameter. */
-        bool rect(const Image &image, const Terminal *t, Rect *out) const {
-            const GridSize grid_size = gridSize(image, t);
-            /* Wisp: value-initialized; upstream's switch covers every tag
-             * and the `virtual`/`relative` arms return. */
-            PageList::Pin *pin = nullptr;
-            switch (location.tag) {
-            case Location::Tag::pin: pin = location.pin; break;
-            case Location::Tag::virtual_:
-            case Location::Tag::relative: return false;
-            default: return false;
-            }
-            if (pin->garbage) return false;
-
-            /* A zero pixel-sized placement can produce a zero grid size when
-             * pixel geometry is unavailable. It occupies no rectangle. */
-            if (grid_size.cols == 0 || grid_size.rows == 0) return false;
-
-            const PageList::Pin::Overflow o = pin->downOverflow(grid_size.rows - 1);
-            PageList::Pin br =
-                o.tag == PageList::Pin::Overflow::Tag::offset ? o.offset : o.overflow.end;
-            {
-                /* We need to sub one here because the x value is
-                 * one width already. So if the image is width "1"
-                 * then we add zero to X because X itself is width 1. */
-                const uint32_t extended = satAddU32((uint32_t)pin->x, grid_size.cols - 1);
-                const uint32_t limit = (uint32_t)t->cols - 1;
-                br.x = (vtsize::CellCountInt)(extended < limit ? extended : limit);
-            }
-
-            out->top_left = *pin;
-            out->bottom_right = br;
-            return true;
-        }
+        bool rect(const Image &image, const Terminal *t, Rect *out) const;
     };
 
     typedef AutoHashMapUnmanaged<uint32_t, Image> ImageMap;
@@ -936,19 +768,7 @@ struct ImageStorage {
         /* Reposition every recorded placement pin to its post-scroll
          * position and release the state. Must be called exactly
          * once, after the scroll's row operations complete. */
-        void end() {
-            /* Wisp: `for (0..n)` snapshot; nothing here mutates the list,
-             * but the bound is snapshotted on principle. */
-            const size_t n = restores.items_len;
-            for (size_t i = 0; i < n; i += 1) {
-                const Restore &restore = restores.items[i];
-                const Maybe<PageList::Pin> p = screen->pages.pin(
-                    point::Point::active(restore.x, restore.y));
-                if (!p.has) continue;
-                *restore.pin = p.value;
-            }
-            restores.deinit(screen->alloc);
-        }
+        void end();
     };
 
     /* Maximum number of parent links in a relative placement chain,
@@ -1066,17 +886,7 @@ struct ImageStorage {
 
     /* ── Methods, in upstream's order. ───────────────────────────── */
 
-    void deinit(Allocator alloc, Screen *s) {
-        if (loading != nullptr) loading->destroy(alloc);
-
-        clearPlacements(s);
-        placements.deinit(alloc);
-
-        ImageMap::Iterator it = images.iterator();
-        ImageMap::Entry kv;
-        while (it.next(&kv)) kv.value_ptr->deinit(alloc);
-        images.deinit(alloc);
-    }
+    void deinit(Allocator alloc, Screen *s);
 
     /* Kitty image protocol is enabled if we have a non-zero limit. */
     bool enabled() const { return total_limit != 0; }
@@ -1099,29 +909,7 @@ struct ImageStorage {
      * can be loaded. If this limit is lower, this will do an eviction
      * if necessary. If the value is zero, then Kitty image protocol will
      * be disabled. */
-    void setLimit(Allocator alloc, Screen *s, size_t limit) {
-        /* Special case disabling by quickly deleting all */
-        if (limit == 0) {
-            const LoadingImage::Limits saved_limits = image_limits;
-            deinit(alloc, s);
-            *this = ImageStorage();
-            image_limits = saved_limits;
-            markMutated();
-        }
-
-        /* If we re lowering our limit, check if we need to evict.
-         * Wisp: upstream does not return from the limit == 0 branch
-         * above; the fall-through is kept. */
-        if (limit < total_bytes) {
-            const size_t req_bytes = total_bytes - limit;
-            /* log.info("evicting images to lower limit, evicting={}", req_bytes) */
-            if (!evictImage(alloc, s, req_bytes)) {
-                /* log.warn("failed to evict enough images for required bytes") */
-            }
-        }
-
-        total_limit = limit;
-    }
+    void setLimit(Allocator alloc, Screen *s, size_t limit);
 
     /* Wisp: `mode: enum { explicit, implicit }`. */
     enum class NextImageIdMode { explicit_, implicit };
@@ -1167,87 +955,13 @@ struct ImageStorage {
      * caller receives a completion token.
      *
      * Wisp: false is OutOfMemory. */
-    bool addImage(Allocator alloc, Screen *s, const Image &img) {
-        const size_t new_len = img.data.len();
-
-        /* If the image itself is over the limit, then error immediately */
-        if (new_len > total_limit) return false;
-
-        /* Credit an existing image's reservation before calculating the
-         * replacement size. In particular, a completed live transmission
-         * replacing pending snapshot metadata must be able to reuse the
-         * reservation without evicting its own ID. */
-        size_t old_len = 0;
-        {
-            Image old;
-            if (images.get(img.id, &old)) old_len = old.storageSize();
-        }
-        assert(old_len <= total_bytes);
-
-        /* Reserve map capacity before evicting anything so allocation failure
-         * cannot leave storage partially evicted. Existing keys need no room. */
-        if (!images.contains(img.id)) {
-            if (!images.ensureUnusedCapacity(alloc, 1)) return false;
-        }
-
-        /* If this would put us over the limit, then evict. */
-        const size_t total = total_bytes - old_len + new_len;
-        if (total > total_limit) {
-            const size_t req_bytes = total - total_limit;
-            /* log.info("evicting images to make space for {} bytes", req_bytes) */
-            if (!evictImageExcept(alloc, s, req_bytes, Maybe<uint32_t>(img.id))) {
-                /* log.warn("failed to evict enough images for required bytes") */
-                return false;
-            }
-        }
-
-        const ImageMap::GetOrPutResult gop = images.getOrPutAssumeCapacity(img.id);
-
-        /* log.debug("addImage image={}", img.withoutData()) */
-
-        if (gop.found_existing) {
-            /* Retransmitting a specific image ID replaces the old image and all
-             * of its placements, as required by the Kitty graphics protocol. */
-            removePlacementsByImageId(s, img.id);
-
-            /* Relative placements parented to the removed placements go too. */
-            (void)removeOrphans(s, nullptr);
-
-            /* Replacing an image drops its animation frames with it,
-             * implementing the protocol rule that retransmitting the
-             * base image resets the animation. */
-            total_bytes -= gop.value_ptr->storageSize();
-            gop.value_ptr->deinit(alloc);
-        }
-
-        *gop.value_ptr = img;
-        gop.value_ptr->metadata.placement_count = 0;
-        total_bytes += new_len;
-
-        /* Stamp the stored image with a fresh generation. This gives
-         * every add/replace a unique stamp even when the same image ID
-         * is retransmitted with identical dimensions, so consumers
-         * (e.g. renderer texture caches) can detect content changes. */
-        markMutated();
-        gop.value_ptr->generation = generation;
-        return true;
-    }
+    bool addImage(Allocator alloc, Screen *s, const Image &img);
 
     /* Add an image whose decoded payload bytes have not arrived yet.
      * Returns the token required to complete this exact transmission.
      *
      * Wisp: false is OutOfMemory; the token comes back through `out`. */
-    bool addPendingImage(Allocator alloc, Screen *s, const Image &img, PendingImage *out) {
-        assert(img.data.tag == Image::Data::Tag::pending);
-        if (!addImage(alloc, s, img)) return false;
-        Image stored;
-        const bool have = images.get(img.id, &stored);
-        assert(have); /* Wisp: upstream's `.?` */
-        (void)have;
-        out->id = stored.id;
-        out->generation = stored.generation;
-        return true;
-    }
+    bool addPendingImage(Allocator alloc, Screen *s, const Image &img, PendingImage *out);
 
     /* Add a placement for a given image. The caller must verify in advance
      * the image exists to prevent memory corruption. On success, storage
@@ -1256,54 +970,7 @@ struct ImageStorage {
      *
      * Wisp: false is OutOfMemory. */
     bool addPlacement(Allocator alloc, Screen *s, uint32_t image_id, uint32_t placement_id,
-                      const Placement &p) {
-        assert(images.getPtr(image_id) != nullptr);
-        /* log.debug("placement image_id={} placement_id={} placement={}") */
-
-        /* When we add a placement, take this opportunity to reap garbage.
-         * Garbage are placements that disappeared off scrollback (were
-         * pruned). We don't clear Kitty state in the hot path so we do
-         * this opportunistically here. */
-        reapGarbagePlacements(s);
-
-        /* The important piece here is that the placement ID needs to
-         * be marked internal if it is zero. This allows multiple placements
-         * to be added for the same image. If it is non-zero, then it is
-         * an external placement ID and we can only have one placement
-         * per (image id, placement id) pair. */
-        PlacementKey key;
-        key.image_id = image_id;
-        if (placement_id == 0) {
-            /* Wisp: upstream's `defer self.next_internal_placement_id +%= 1`
-             * inside the labeled block yields the pre-increment value. */
-            const uint32_t internal_id = next_internal_placement_id;
-            next_internal_placement_id += 1; /* `+%=` */
-            key.placement_id = PlacementId::internal(internal_id);
-        } else {
-            key.placement_id = PlacementId::external(placement_id);
-        }
-
-        PlacementMap::GetOrPutResult gop;
-        if (!placements.getOrPut(alloc, key, &gop)) return false;
-        if (gop.found_existing) {
-            gop.value_ptr->deinit(s);
-        } else {
-            Image *img = images.getPtr(image_id);
-            assert(img != nullptr); /* Wisp: upstream's `.?` */
-            /* Wisp: `std.math.add(u30, placement_count, 1) catch` — see the
-             * placement_count_max note at the top of this file. */
-            if (img->metadata.placement_count >= placement_count_max) {
-                placements.removeByPtr(gop.key_ptr);
-                return false;
-            }
-            img->metadata.placement_count += 1;
-        }
-        *gop.value_ptr = p;
-
-        /* This always mutates */
-        markMutated();
-        return true;
-    }
+                      const Placement &p);
 
     /* Adjust placements for a scroll of the terminal's scrolling region
      * by `delta` rows (negative moves content up). This implements the
@@ -1326,147 +993,7 @@ struct ImageStorage {
      * full screen: a full-screen scroll moves placements with their
      * anchored rows (possibly into the scrollback) via pin tracking,
      * which already matches kitty's marginless scroll behavior. */
-    ScrollMargins scrollMarginsBegin(Terminal *t, int64_t delta, ScrollOp op) {
-        Screen *s = t->screens.active;
-        /* Wisp: upstream asserts `self == &s.kitty_images`; Screen carries
-         * no kitty_images in this configuration. See the header note. */
-        ScrollMargins result;
-        result.screen = s;
-
-        const int64_t top = (int64_t)t->scrolling_region.top;
-        const int64_t bottom = (int64_t)t->scrolling_region.bottom;
-
-        bool mutated = false;
-        PlacementMap::Iterator it = placements.iterator();
-        PlacementMap::Entry entry;
-        while (it.next(&entry)) {
-            Placement *p = entry.value_ptr;
-
-            /* Virtual placements follow their placeholder cells and
-             * relative placements follow their parents, so neither is
-             * ever adjusted by scrolls, matching kitty. */
-            if (p->location.tag != Placement::Location::Tag::pin) continue;
-            PageList::Pin *pin = p->location.pin;
-
-            /* Pruned placements are reaped by reapGarbagePlacements. */
-            if (pin->garbage) continue;
-
-            /* Placements anchored outside the active area (scrollback)
-             * are never touched by a scroll within the margins. */
-            const Maybe<point::Point> pt = s->pages.pointFromPin(point::Tag::active, *pin);
-            if (!pt.has) continue;
-            const point::Coordinate coord = pt.value.coord();
-            const int64_t y = (int64_t)coord.y;
-
-            /* An in-place operation doesn't touch pins anchored outside
-             * the region rows, and a placement anchored there can never
-             * be entirely inside the region, so it needs no work at all. */
-            if (op == ScrollOp::in_place && (y < top || y > bottom)) continue;
-
-            /* The final position defaults to unmoved; restoring the pin
-             * to this exact spot afterwards is what stops the row
-             * operations from dragging the placement around. */
-            int64_t final_y = y;
-
-            /* Wisp: upstream's `inside:` labeled block. `removed` carries
-             * the `continue` that targets the outer loop. */
-            bool removed = false;
-            do {
-                Image image;
-                if (!images.get(entry.key_ptr->image_id, &image)) break;
-                const Placement::GridSize grid = p->gridSize(image, t);
-
-                /* Unknown geometry (e.g. pixel sizes not yet reported)
-                 * means we can't know the extent, so we can't consider
-                 * the placement contained. */
-                if (grid.rows == 0 || grid.cols == 0) break;
-
-                /* Only placements entirely within the scrolling region
-                 * move. Kitty only has top/bottom margins so it only
-                 * checks rows; the column check is our generalization
-                 * for left/right margins and is trivially true for
-                 * full-width regions. */
-                if (y < top || y + (int64_t)grid.rows - 1 > bottom) break;
-                const int64_t x = (int64_t)coord.x;
-                {
-                    const int64_t right_edge = x + (int64_t)grid.cols - 1;
-                    const int64_t cols_limit = (int64_t)t->cols - 1;
-                    const int64_t clamped =
-                        right_edge < cols_limit ? right_edge : cols_limit;
-                    if (x < (int64_t)t->scrolling_region.left ||
-                        clamped > (int64_t)t->scrolling_region.right)
-                        break;
-                }
-
-                const int64_t new_y = y + delta;
-                const int64_t rows = (int64_t)grid.rows;
-                const int64_t top_clip = (top - new_y) > 0 ? (top - new_y) : 0;
-                const int64_t bottom_clip_raw = new_y + rows - 1 - bottom;
-                const int64_t bottom_clip = bottom_clip_raw > 0 ? bottom_clip_raw : 0;
-                /* Wisp: upstream's `clip:` labeled block. `visible` is
-                 * assigned on every path, so it is never read unset. */
-                bool visible;
-                do {
-                    if (top_clip >= rows || bottom_clip >= rows) {
-                        visible = false;
-                        break;
-                    }
-
-                    if (top_clip > 0) {
-                        if (!p->clipTop(image, t, (uint32_t)top_clip, grid.rows)) {
-                            visible = false;
-                            break;
-                        }
-                        mutated = true;
-                        final_y = top;
-                        visible = true;
-                        break;
-                    }
-
-                    if (bottom_clip > 0) {
-                        if (!p->clipBottom(image, t, (uint32_t)bottom_clip, grid.rows)) {
-                            visible = false;
-                            break;
-                        }
-                        mutated = true;
-                    }
-
-                    final_y = new_y;
-                    visible = true;
-                } while (0);
-
-                /* Scrolled or clipped entirely out of the region: the
-                 * placement is deleted, like kitty. The image itself is
-                 * retained for future placements. */
-                if (!visible) {
-                    removePlacement(s, entry);
-                    mutated = true;
-                    removed = true;
-                }
-            } while (0);
-            if (removed) continue;
-
-            ScrollMargins::Restore restore;
-            restore.pin = pin;
-            restore.x = pin->x;
-            restore.y = (uint32_t)final_y;
-            if (!result.restores.append(s->alloc, restore)) {
-                /* OOM: this placement is left to the whims of the
-                 * generic pin tracking. Degraded, but safe. */
-                /* log.warn("OOM adjusting image placement for scroll") */
-                continue;
-            }
-        }
-
-        if (mutated) {
-            /* Placements deleted by clipping may orphan relative placements.
-             * Orphans have no pins so this never touches the restores. */
-            (void)removeOrphans(s, nullptr);
-            markMutated();
-        }
-
-        return result;
-    }
+    ScrollMargins scrollMarginsBegin(Terminal *t, int64_t delta, ScrollOp op);
 
     /* Reap pin-backed placements whose tracked content has been pruned
      * from history, along with any relative placements orphaned by
@@ -1475,54 +1002,16 @@ struct ImageStorage {
      * Virtual and relative placements have no tracked screen location and
      * are never pruned themselves. Kitty removes placements once they
      * scroll out of retained history. */
-    void reapGarbagePlacements(Screen *s) {
-        bool removed = false;
-        PlacementMap::Iterator it = placements.iterator();
-        PlacementMap::Entry entry;
-        while (it.next(&entry)) {
-            if (entry.value_ptr->location.tag != Placement::Location::Tag::pin) continue;
-            PageList::Pin *pin = entry.value_ptr->location.pin;
-            if (!pin->garbage) continue;
+    void reapGarbagePlacements(Screen *s);
 
-            removePlacement(s, entry);
-            removed = true;
-        }
-        if (!removed) return;
+    void clearPlacements(Screen *s);
 
-        /* If we removed a placement, then also remove any orphan
-         * children if this was a parent. */
-        (void)removeOrphans(s, nullptr);
-
-        markMutated();
-    }
-
-    void clearPlacements(Screen *s) {
-        PlacementMap::Iterator it = placements.iterator();
-        PlacementMap::Entry entry;
-        while (it.next(&entry)) entry.value_ptr->deinit(s);
-        placements.clearRetainingCapacity();
-    }
-
-    void removePlacementsByImageId(Screen *s, uint32_t image_id) {
-        PlacementMap::Iterator it = placements.iterator();
-        PlacementMap::Entry entry;
-        while (it.next(&entry)) {
-            if (entry.key_ptr->image_id != image_id) continue;
-            removePlacement(s, entry);
-        }
-    }
+    void removePlacementsByImageId(Screen *s, uint32_t image_id);
 
     /* Remove a placement by its map entry, releasing any tracked pin
      * and keeping the image's placement count in sync. The entry must
      * point into the placements map (via iteration or getEntry). */
-    void removePlacement(Screen *s, const PlacementMap::Entry &entry) {
-        entry.value_ptr->deinit(s);
-        Image *img = images.getPtr(entry.key_ptr->image_id);
-        assert(img != nullptr); /* Wisp: upstream's `.?` */
-        assert(img->metadata.placement_count > 0);
-        img->metadata.placement_count -= 1;
-        placements.removeByPtr(entry.key_ptr);
-    }
+    void removePlacement(Screen *s, const PlacementMap::Entry &entry);
 
     /* Remove relative placements whose parent placement no longer
      * exists, keeping a relative placement's lifetime tied to its
@@ -1540,31 +1029,7 @@ struct ImageStorage {
      * effect lazily by dropping unresolvable placements while drawing;
      * we do it eagerly because our renderer never mutates terminal
      * state. */
-    bool removeOrphans(Screen *s, const Allocator *delete_unused) {
-        bool removed_any = false;
-        bool removed = true;
-        while (removed) {
-            removed = false;
-            PlacementMap::Iterator it = placements.iterator();
-            PlacementMap::Entry entry;
-            while (it.next(&entry)) {
-                if (entry.value_ptr->location.tag != Placement::Location::Tag::relative)
-                    continue;
-                const Placement::Relative rel = entry.value_ptr->location.relative;
-                if (placements.contains(rel.parent)) continue;
-
-                /* Parent is gone, remove this placement. */
-                const uint32_t image_id = entry.key_ptr->image_id;
-                removePlacement(s, entry);
-                removed = true;
-                removed_any = true;
-
-                if (delete_unused != nullptr) deleteIfUnused(*delete_unused, image_id);
-            }
-        }
-
-        return removed_any;
-    }
+    bool removeOrphans(Screen *s, const Allocator *delete_unused);
 
     /* Resolve and validate the parent reference (P=/Q=) of a relative
      * placement, returning the concrete key of the parent placement.
@@ -1581,77 +1046,7 @@ struct ImageStorage {
      * Maybe. */
     ParentError resolveParent(Screen *s, const Maybe<PlacementKey> &child,
                               uint32_t parent_image_id, uint32_t parent_placement_id,
-                              PlacementKey *out) {
-        /* Reap placements whose content has been pruned from history
-         * before resolving: a pruned parent must be reported as missing,
-         * not accepted and then immediately reaped by addPlacement's own
-         * sweep, which would store an orphan. */
-        reapGarbagePlacements(s);
-
-        /* If the parent doesn't exist we're already failed. */
-        if (!images.contains(parent_image_id)) {
-            return ParentError::ParentImageNotFound;
-        }
-
-        /* Find the parent. Wisp: upstream's `parent:` labeled block. */
-        PlacementKey parent;
-        {
-            /* An explicit parent placement ID (Q=) selects exactly that
-             * placement. */
-            if (parent_placement_id > 0) {
-                const PlacementKey key(parent_image_id,
-                                       PlacementId::external(parent_placement_id));
-                if (!placements.contains(key)) {
-                    return ParentError::ParentPlacementNotFound;
-                }
-                parent = key;
-            } else {
-                /* No Q: pick a placement of the parent image. Kitty picks
-                 * the oldest surviving placement; our placement map doesn't
-                 * track creation order so we pick by PlacementId.preferredOver
-                 * instead. This is unspecified so any behavior here is fine.
-                 * In practice the parent image has a single placement, and
-                 * clients use Q when it doesn't. */
-                Maybe<PlacementId> best = Maybe<PlacementId>::none();
-                PlacementMap::KeyIterator it = placements.keyIterator();
-                for (PlacementKey *key = it.next(); key != nullptr; key = it.next()) {
-                    if (key->image_id != parent_image_id) continue;
-                    const PlacementId id = key->placement_id;
-                    if (!best.has) {
-                        best = Maybe<PlacementId>(id);
-                        continue;
-                    }
-                    if (id.preferredOver(best.value)) best = Maybe<PlacementId>(id);
-                }
-                if (!best.has) return ParentError::ParentPlacementNotFound;
-
-                parent = PlacementKey(parent_image_id, best.value);
-            }
-        }
-
-        /* A placement cannot be its own parent. This must be checked
-         * before the chain walk so it reports EINVAL, not ECYCLE. */
-        if (child.has && parent.eql(child.value)) return ParentError::SelfParent;
-
-        /* Walk the would-be ancestor chain. `depth` counts parent links,
-         * starting at one for the link we are about to create. */
-        size_t depth = 1;
-        PlacementKey key = parent;
-        while (true) {
-            if (child.has && key.eql(child.value)) return ParentError::Cycle;
-            Placement p;
-            if (!placements.get(key, &p)) return ParentError::AncestorNotFound;
-            /* A pin or virtual placement is the chain root. */
-            if (p.location.tag != Placement::Location::Tag::relative) break;
-            const Placement::Relative rel = p.location.relative;
-            if (depth >= parent_chain_limit) return ParentError::TooDeep;
-            depth += 1;
-            key = rel.parent;
-        }
-
-        *out = parent;
-        return ParentError::none;
-    }
+                              PlacementKey *out);
 
     /* Resolve a relative placement's parent chain to its root,
      * accumulating the cell offsets (H=/V=) of every link on the way.
@@ -1833,25 +1228,7 @@ struct ImageStorage {
      * image or call releaseAnimationBytes.
      *
      * Wisp: false is OutOfMemory. */
-    bool reserveAnimationBytes(Allocator alloc, Screen *s, uint32_t image_id, size_t bytes) {
-        if (bytes > total_limit) return false;
-
-        const size_t total = total_bytes + bytes;
-        if (total > total_limit) {
-            const size_t req_bytes = total - total_limit;
-            /* Excess this large cannot be recovered by evicting other
-             * images (evictImageExcept also requires it). */
-            if (req_bytes > total_limit) return false;
-            /* log.info("evicting images for animation frame, evicting={}", req_bytes) */
-            if (!evictImageExcept(alloc, s, req_bytes, Maybe<uint32_t>(image_id))) {
-                /* log.warn("failed to evict enough images for animation frame") */
-                return false;
-            }
-        }
-
-        total_bytes += bytes;
-        return true;
-    }
+    bool reserveAnimationBytes(Allocator alloc, Screen *s, uint32_t image_id, size_t bytes);
 
     /* Release a reservation made by reserveAnimationBytes, or credit
      * bytes freed by deleting animation frame data. */
@@ -1997,318 +1374,20 @@ struct ImageStorage {
     /* Clear placements intersecting the active screen, then reclaim every
      * image with no remaining placement. Unlike protocol d=A, a terminal
      * clear also reclaims images that were already unplaced. */
-    void clearScreen(Allocator alloc, Terminal *t) {
-        const size_t placements_before = placements.count();
-        const size_t images_before = images.count();
-
-        /* Delete unused placements and images. Orphaned relative
-         * placements must be reaped before the image sweep so that
-         * their images are reclaimable too. */
-        deleteVisiblePlacements(alloc, t, true);
-        (void)removeOrphans(t->screens.active, nullptr);
-        ImageMap::Iterator image_it = images.iterator();
-        ImageMap::Entry entry;
-        while (image_it.next(&entry)) {
-            deleteIfUnused(alloc, *entry.key_ptr);
-        }
-
-        /* Mark mutated only if things changed. */
-        if (placements.count() != placements_before || images.count() != images_before)
-            markMutated();
-    }
+    void clearScreen(Allocator alloc, Terminal *t);
 
     /* Wisp: `delete` is a C++ keyword. */
     /* Delete placements, images. */
-    void delete_(Allocator alloc, Terminal *t, const command::Delete::Action &cmd) {
-        /* Deletes only ever remove placements/images, so comparing counts
-         * before and after tells us whether anything actually changed.
-         * Only then do we mark a mutation, so a delete that matches nothing
-         * doesn't dirty the image state or bump the generation.
-         *
-         * Wisp: upstream's `defer` is this RAII guard; it runs after the
-         * removeOrphans call at the bottom, like Zig's. */
-        struct MutationGuard {
-            ImageStorage *self;
-            size_t placements_before;
-            size_t images_before;
-
-            MutationGuard(ImageStorage *s)
-                : self(s), placements_before(s->placements.count()),
-                  images_before(s->images.count()) {}
-            ~MutationGuard() {
-                if (self->placements.count() != placements_before ||
-                    self->images.count() != images_before)
-                    self->markMutated();
-            }
-        } mutation_guard(this);
-
-        typedef command::Delete::Action Action;
-        switch (cmd.tag) {
-        case Action::Tag::all: deleteVisiblePlacements(alloc, t, cmd.all); break;
-
-        case Action::Tag::id:
-            deleteById(alloc, t->screens.active, cmd.id.image_id, cmd.id.placement_id,
-                       cmd.id.delete_);
-            break;
-
-        case Action::Tag::newest: {
-            /* Wisp: upstream's `newest:` labeled block. */
-            const Maybe<Image> img = imageByNumber(cmd.newest.image_number);
-            if (!img.has) break;
-            deleteById(alloc, t->screens.active, img.value.id, cmd.newest.placement_id,
-                       cmd.newest.delete_);
-            break;
-        }
-
-        case Action::Tag::intersect_cursor: {
-            deleteIntersecting(alloc, t,
-                               point::Point::active(t->screens.active->cursor.x,
-                                                    t->screens.active->cursor.y),
-                               cmd.intersect_cursor, 0, nullptr);
-            break;
-        }
-
-        case Action::Tag::intersect_cell: {
-            /* Wisp: upstream's `intersect_cell:` labeled block. */
-            if (cmd.intersect_cell.x <= 0 || cmd.intersect_cell.y <= 0) {
-                /* log.warn("delete intersect cell coords must be at least 1") */
-                break;
-            }
-
-            const uint32_t cx = cmd.intersect_cell.x - 1;
-            const uint32_t cy = cmd.intersect_cell.y - 1;
-            if (cx > 0xFFFFu) break; /* std.math.cast(size.CellCountInt, ...) */
-            if (cy > 0xFFFFu) break;
-            deleteIntersecting(alloc, t,
-                               point::Point::active((vtsize::CellCountInt)cx, cy),
-                               cmd.intersect_cell.delete_, 0, nullptr);
-            break;
-        }
-
-        case Action::Tag::intersect_cell_z: {
-            /* Wisp: upstream's `intersect_cell_z:` labeled block. */
-            if (cmd.intersect_cell_z.x <= 0 || cmd.intersect_cell_z.y <= 0) {
-                /* log.warn("delete intersect cell coords must be at least 1") */
-                break;
-            }
-
-            const uint32_t cx = cmd.intersect_cell_z.x - 1;
-            const uint32_t cy = cmd.intersect_cell_z.y - 1;
-            if (cx > 0xFFFFu) break;
-            if (cy > 0xFFFFu) break;
-            deleteIntersecting(alloc, t,
-                               point::Point::active((vtsize::CellCountInt)cx, cy),
-                               cmd.intersect_cell_z.delete_, cmd.intersect_cell_z.z,
-                               &zFilter);
-            break;
-        }
-
-        case Action::Tag::column: {
-            /* Wisp: upstream's `column:` labeled block. */
-            if (cmd.column.x <= 0) {
-                /* log.warn("delete column must be greater than zero") */
-                break;
-            }
-
-            const uint32_t x = cmd.column.x - 1;
-            PlacementMap::Iterator it = placements.iterator();
-            PlacementMap::Entry entry;
-            while (it.next(&entry)) {
-                const Maybe<Image> img = imageById(entry.key_ptr->image_id);
-                if (!img.has) continue;
-                Rect r;
-                if (!entry.value_ptr->rect(img.value, t, &r)) continue;
-                if ((uint32_t)r.top_left.x <= x && (uint32_t)r.bottom_right.x >= x) {
-                    removePlacement(t->screens.active, entry);
-                    if (cmd.column.delete_) deleteIfUnused(alloc, img.value.id);
-                }
-            }
-            break;
-        }
-
-        case Action::Tag::row: {
-            /* Wisp: upstream's `row:` labeled block. */
-            if (cmd.row.y <= 0) {
-                /* log.warn("delete row must be greater than zero") */
-                break;
-            }
-
-            /* v.y is in active coords so we want to convert it to a pin
-             * so we can compare by page offsets. */
-            const uint32_t ry = cmd.row.y - 1;
-            if (ry > 0xFFFFu) break; /* std.math.cast(size.CellCountInt, v.y - 1) */
-            const Maybe<PageList::Pin> target_pin =
-                t->screens.active->pages.pin(point::Point::active(0, ry));
-            if (!target_pin.has) break;
-
-            PlacementMap::Iterator it = placements.iterator();
-            PlacementMap::Entry entry;
-            while (it.next(&entry)) {
-                const Maybe<Image> img = imageById(entry.key_ptr->image_id);
-                if (!img.has) continue;
-                Rect r;
-                if (!entry.value_ptr->rect(img.value, t, &r)) continue;
-
-                /* We need to copy our pin to ensure we are at least at
-                 * the top-left x. */
-                PageList::Pin target_pin_copy = target_pin.value;
-                target_pin_copy.x = r.top_left.x;
-                if (target_pin_copy.isBetween(r.top_left, r.bottom_right)) {
-                    removePlacement(t->screens.active, entry);
-                    if (cmd.row.delete_) deleteIfUnused(alloc, img.value.id);
-                }
-            }
-            break;
-        }
-
-        case Action::Tag::z: {
-            PlacementMap::Iterator it = placements.iterator();
-            PlacementMap::Entry entry;
-            while (it.next(&entry)) {
-                switch (entry.value_ptr->location.tag) {
-                /* Relative placements carry their own z value and
-                 * are matched by z deletes just like kitty does. */
-                case Placement::Location::Tag::pin:
-                case Placement::Location::Tag::relative: break;
-
-                /* Virtual placeholders cannot delete by z according
-                 * to the spec. */
-                case Placement::Location::Tag::virtual_: continue;
-                }
-
-                if (entry.value_ptr->z == cmd.z.z) {
-                    const uint32_t image_id = entry.key_ptr->image_id;
-                    removePlacement(t->screens.active, entry);
-                    if (cmd.z.delete_) deleteIfUnused(alloc, image_id);
-                }
-            }
-            break;
-        }
-
-        case Action::Tag::range: {
-            /* Wisp: upstream's `range:` labeled block.
-             * Both bounds default to zero when omitted. An inverted range
-             * or a zero upper bound is not an error, it just selects
-             * nothing: image IDs are always non-zero. */
-            if (cmd.range.last == 0 || cmd.range.first > cmd.range.last) break;
-
-            /* Remove matching placements in one pass. */
-            {
-                PlacementMap::Iterator placement_it = placements.iterator();
-                PlacementMap::Entry entry;
-                while (placement_it.next(&entry)) {
-                    if (entry.key_ptr->image_id < cmd.range.first ||
-                        entry.key_ptr->image_id > cmd.range.last)
-                        continue;
-
-                    removePlacement(t->screens.active, entry);
-                }
-            }
-
-            /* Uppercase deletion also frees matching images that are now
-             * unused, including images that had no placements initially. */
-            if (!cmd.range.delete_) break;
-            {
-                ImageMap::Iterator image_it = images.iterator();
-                ImageMap::Entry entry;
-                while (image_it.next(&entry)) {
-                    const uint32_t image_id = *entry.key_ptr;
-                    if (image_id >= cmd.range.first && image_id <= cmd.range.last) {
-                        deleteIfUnused(alloc, image_id);
-                    }
-                }
-            }
-            break;
-        }
-
-        case Action::Tag::animation_frames:
-            deleteAnimationFrame(alloc, t->screens.active, cmd.animation_frames);
-            break;
-        }
-
-        /* Deleting placements orphans any relative placements parented
-         * to them (transitively). Their lifetime is tied to the parent
-         * so they are removed as well, and an uppercase delete also
-         * frees any image the cascade leaves without placements (the
-         * per-branch deleteIfUnused calls above ran while the orphans
-         * still counted as placements). */
-        bool delete_unused = false;
-        switch (cmd.tag) {
-        case Action::Tag::all: delete_unused = cmd.all; break;
-        case Action::Tag::intersect_cursor: delete_unused = cmd.intersect_cursor; break;
-        case Action::Tag::id: delete_unused = cmd.id.delete_; break;
-        case Action::Tag::newest: delete_unused = cmd.newest.delete_; break;
-        case Action::Tag::animation_frames:
-            delete_unused = cmd.animation_frames.delete_;
-            break;
-        case Action::Tag::intersect_cell: delete_unused = cmd.intersect_cell.delete_; break;
-        case Action::Tag::intersect_cell_z:
-            delete_unused = cmd.intersect_cell_z.delete_;
-            break;
-        case Action::Tag::range: delete_unused = cmd.range.delete_; break;
-        case Action::Tag::column: delete_unused = cmd.column.delete_; break;
-        case Action::Tag::row: delete_unused = cmd.row.delete_; break;
-        case Action::Tag::z: delete_unused = cmd.z.delete_; break;
-        }
-        (void)removeOrphans(t->screens.active, delete_unused ? &alloc : nullptr);
-    }
+    void delete_(Allocator alloc, Terminal *t, const command::Delete::Action &cmd);
 
     /* Delete only non-virtual placements that intersect the active screen.
      * The protocol defines d=a/A in terms of visible placements, and an
      * uppercase delete only frees data for images selected by those
      * placements. */
-    void deleteVisiblePlacements(Allocator alloc, Terminal *t, bool delete_unused) {
-        PlacementMap::Iterator it = placements.iterator();
-        PlacementMap::Entry entry;
-        while (it.next(&entry)) {
-            /* Virtual placements are never selected by visible
-             * deletes per the protocol. Relative placements are
-             * removed with their parents instead (removeOrphans). */
-            if (entry.value_ptr->location.tag != Placement::Location::Tag::pin) continue;
-            PageList::Pin *pin = entry.value_ptr->location.pin;
-            if (pin->garbage) continue;
-
-            /* Placements anchored in the active area are necessarily visible.
-             * Only compute their extent when the anchor is already in history
-             * and the bottom edge may still intersect the active area. */
-            if (!t->screens.active->pages.pointFromPin(point::Tag::active, *pin).has) {
-                const Maybe<Image> image = imageById(entry.key_ptr->image_id);
-                if (!image.has) continue;
-                Rect r;
-                if (!entry.value_ptr->rect(image.value, t, &r)) continue;
-                if (!t->screens.active->pages
-                         .pointFromPin(point::Tag::active, r.bottom_right)
-                         .has)
-                    continue;
-            }
-
-            const uint32_t image_id = entry.key_ptr->image_id;
-            removePlacement(t->screens.active, entry);
-            if (delete_unused) deleteIfUnused(alloc, image_id);
-        }
-    }
+    void deleteVisiblePlacements(Allocator alloc, Terminal *t, bool delete_unused);
 
     void deleteById(Allocator alloc, Screen *s, uint32_t image_id, uint32_t placement_id,
-                    bool delete_unused) {
-        bool matched = placement_id == 0;
-
-        /* If no placement, we delete all placements with the ID */
-        if (placement_id == 0) {
-            removePlacementsByImageId(s, image_id);
-        } else {
-            PlacementMap::Entry entry;
-            if (placements.getEntry(PlacementKey(image_id, PlacementId::external(placement_id)),
-                                    &entry)) {
-                removePlacement(s, entry);
-                matched = true;
-            }
-        }
-
-        /* A placement ID narrows the selection to that exact placement, so an
-         * unmatched selector must not free otherwise-unreferenced image data.
-         * https://sw.kovidgoyal.net/kitty/graphics-protocol/#deleting-images */
-        if (delete_unused && matched) deleteIfUnused(alloc, image_id);
-    }
+                    bool delete_unused);
 
     /* Delete an animation frame (d=f/F). Deletes never produce
      * responses, so all failures are only logged. Kitty behaviors
@@ -2318,75 +1397,7 @@ struct ImageStorage {
      * last frame and zero selects the root frame; deleting the root
      * frame promotes frame 2 to be the new root. */
     void deleteAnimationFrame(Allocator alloc, Screen *s,
-                              const command::Delete::Action::AnimationFrames &v) {
-        if (v.image_id == 0 && v.image_number == 0) {
-            /* log.warn("delete animation frames requires image id or number") */
-            return;
-        }
-        Image *img = imagePtrByIdOrNumber(v.image_id, v.image_number);
-        if (img == nullptr) {
-            /* log.warn("delete animation frames for unknown image id={} number={}") */
-            return;
-        }
-
-        /* Wisp: upstream's `anim:` labeled block. */
-        animation::Animation *anim = nullptr;
-        if (img->animation_ != nullptr && img->animation_->frames.items_len > 0) {
-            anim = img->animation_;
-        } else {
-            /* The image is not (or no longer) an animation. The
-             * uppercase delete removes the entire image, even when it
-             * still has placements. */
-            if (!v.delete_) return;
-            removePlacementsByImageId(s, img->id);
-            ImageMap::Entry entry;
-            const bool have = images.getEntry(img->id, &entry);
-            assert(have); /* Wisp: upstream's `.?` */
-            (void)have;
-            total_bytes -= entry.value_ptr->storageSize();
-            entry.value_ptr->deinit(alloc);
-            images.removeByPtr(entry.key_ptr);
-            return;
-        }
-
-        /* Clamp the frame number: zero selects the root frame and
-         * values past the end select the last frame. */
-        const uint32_t count = anim->frameCount();
-        uint32_t number = v.frame < count ? v.frame : count;
-        if (number == 0) number = 1;
-
-        if (number == 1) {
-            /* Deleting the root frame promotes frame 2 to root. The
-             * promoted frame's bytes stay reserved; only the old root
-             * data is freed. */
-            releaseAnimationBytes(img->data.len());
-            img->data.deinit(alloc);
-            const animation::Animation::Frame promoted = orderedRemoveFrame(anim, 0);
-            img->data = Image::Data::initComplete(promoted.data, promoted.data_len);
-            anim->root_gap_ms = promoted.gap_ms;
-        } else {
-            const animation::Animation::Frame removed = orderedRemoveFrame(anim, number - 2);
-            releaseAnimationBytes(removed.data_len);
-            alloc.free(removed.data, removed.data_len);
-        }
-
-        /* Fix up the current frame. */
-        const uint32_t removed_idx = number == 1 ? 0 : number - 2;
-        const uint32_t remaining = (uint32_t)anim->frames.items_len;
-        if (anim->current_index > remaining) {
-            anim->current_index = remaining;
-            anim->has_frame_shown_at_ms = false;
-            markImageContentChanged(img);
-            return;
-        }
-        if (removed_idx == anim->current_index) {
-            anim->has_frame_shown_at_ms = false;
-            markImageContentChanged(img);
-        } else {
-            if (removed_idx < anim->current_index) anim->current_index -= 1;
-            markMutated();
-        }
-    }
+                              const command::Delete::Action::AnimationFrames &v);
 
     /* Delete an image if it is unused. */
     void deleteIfUnused(Allocator alloc, uint32_t image_id) {
@@ -2406,25 +1417,7 @@ struct ImageStorage {
     /* Deletes all placements intersecting a screen point. */
     void deleteIntersecting(Allocator alloc, Terminal *t, const point::Point &p,
                             bool delete_unused, int32_t filter_ctx,
-                            bool (*filter)(int32_t, const Placement &)) {
-        /* Convert our target point to a pin for comparison. */
-        const Maybe<PageList::Pin> target_pin = t->screens.active->pages.pin(p);
-        if (!target_pin.has) return;
-
-        PlacementMap::Iterator it = placements.iterator();
-        PlacementMap::Entry entry;
-        while (it.next(&entry)) {
-            const Maybe<Image> img = imageById(entry.key_ptr->image_id);
-            if (!img.has) continue;
-            Rect r;
-            if (!entry.value_ptr->rect(img.value, t, &r)) continue;
-            if (r.contains(target_pin.value)) {
-                if (filter != nullptr && !filter(filter_ctx, *entry.value_ptr)) continue;
-                removePlacement(t->screens.active, entry);
-                if (delete_unused) deleteIfUnused(alloc, img.value.id);
-            }
-        }
-    }
+                            bool (*filter)(int32_t, const Placement &));
 
     /* Evict image to make space. This will evict the oldest image,
      * prioritizing transient images and unused images as recommended by the
@@ -2432,9 +1425,7 @@ struct ImageStorage {
      *
      * This will evict as many images as necessary to make space for
      * req bytes. */
-    bool evictImage(Allocator alloc, Screen *s, size_t req) {
-        return evictImageExcept(alloc, s, req, Maybe<uint32_t>::none());
-    }
+    bool evictImage(Allocator alloc, Screen *s, size_t req);
 
     /* Wisp: upstream's local `Candidate` struct, hoisted because C++
      * cannot declare a type with methods inside a function and use it
@@ -2471,77 +1462,7 @@ struct ImageStorage {
     /* Evict images while preserving `exclude_id`, used when replacing an
      * existing image whose old reservation has already been credited. */
     bool evictImageExcept(Allocator alloc, Screen *s, size_t req,
-                          const Maybe<uint32_t> &exclude_id) {
-        assert(req <= total_limit);
-
-        /* Evicting anything is a content mutation. This matters for the
-         * setLimit path in particular, which doesn't otherwise mark it.
-         * Evicted placements can also orphan relative placements of
-         * other images, which must be reaped along with them.
-         *
-         * Wisp: upstream's `defer` is this RAII guard, so it also runs
-         * on the early `return false` from the candidate search. */
-        struct EvictGuard {
-            ImageStorage *self;
-            Screen *s;
-            size_t images_before;
-
-            EvictGuard(ImageStorage *st, Screen *sc)
-                : self(st), s(sc), images_before(st->images.count()) {}
-            ~EvictGuard() {
-                if (self->images.count() != images_before) {
-                    (void)self->removeOrphans(s, nullptr);
-                    self->markMutated();
-                }
-            }
-        } evict_guard(this, s);
-
-        size_t evicted = 0;
-        while (evicted < req) {
-            /* Wisp: upstream's `candidate:` labeled block. */
-            Candidate c;
-            {
-                Maybe<Candidate> best = Maybe<Candidate>::none();
-                ImageMap::Iterator it = images.iterator();
-                ImageMap::Entry kv;
-                while (it.next(&kv)) {
-                    Image *img = kv.value_ptr;
-                    if (exclude_id.has && img->id == exclude_id.value) continue;
-
-                    const Candidate current = Candidate::init(img);
-                    if (!best.has || current.lessThan(best.value))
-                        best = Maybe<Candidate>(current);
-                }
-                if (!best.has) return false;
-                c = best.value;
-            }
-
-            {
-                PlacementMap::Iterator p_it = placements.iterator();
-                PlacementMap::Entry entry;
-                while (p_it.next(&entry)) {
-                    if (entry.key_ptr->image_id == c.id) {
-                        removePlacement(s, entry);
-                    }
-                }
-            }
-
-            ImageMap::Entry entry;
-            const bool have = images.getEntry(c.id, &entry);
-            assert(have); /* Wisp: upstream's `.?` */
-            (void)have;
-            const size_t image_len = entry.value_ptr->storageSize();
-            /* log.info("evicting image id={} bytes={}", c.id, image_len) */
-
-            evicted += image_len;
-            total_bytes -= image_len;
-
-            entry.value_ptr->deinit(alloc);
-            images.removeByPtr(entry.key_ptr);
-        }
-
-        return true;
-    }
+                          const Maybe<uint32_t> &exclude_id);
 };
 
 /* Wisp: defined out of line; the body names ImageStorage, which is

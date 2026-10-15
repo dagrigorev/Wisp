@@ -139,9 +139,24 @@ struct Terminal {
         Screen::CursorStyle default_cursor_style; /* = .block */
         Maybe<bool> default_cursor_blink;         /* = false */
 
+        /* The total storage limit for Kitty images in bytes.
+         *
+         * Wisp: upstream's default is `switch (build_options.artifact)`;
+         * Wisp is the `.ghostty` artifact, so the `.lib` arm is omitted. */
+        size_t kitty_image_storage_limit; /* = 320 * 1000 * 1000 (320MB) */
+
+        /* The limits for what medium types are allowed for Kitty image
+         * loading. For example, if no `sys.decode_png` hook is specified,
+         * png formats are disabled no matter what. */
+        terminal::kitty::graphics_image::LoadingImage::Limits
+            kitty_image_loading_limits; /* = .direct */
+
         Options(size::CellCountInt c, size::CellCountInt r)
             : cols(c), rows(r), max_scrollback_bytes((size_t)10000), max_scrollback_lines(), colors(Colors::default_()),
-              default_modes(), default_cursor_style(Screen::CursorStyle::block), default_cursor_blink(false) {}
+              default_modes(), default_cursor_style(Screen::CursorStyle::block), default_cursor_blink(false),
+              kitty_image_storage_limit(320 * 1000 * 1000),
+              kitty_image_loading_limits(
+                  terminal::kitty::graphics_image::LoadingImage::Limits::direct()) {}
     };
 
     /* Wisp: std.ArrayList(u8). Only the operations Terminal uses are
@@ -369,6 +384,8 @@ struct Terminal {
         ScreenSet screen_set;
         {
             Screen::Options screen_opts(cols, rows, opts.max_scrollback_bytes, opts.max_scrollback_lines);
+            screen_opts.kitty_image_storage_limit = opts.kitty_image_storage_limit;
+            screen_opts.kitty_image_loading_limits = opts.kitty_image_loading_limits;
             if (!ScreenSet::init(alloc, screen_opts, &screen_set)) return false;
         }
 
@@ -548,6 +565,43 @@ struct Terminal {
      * necessary. */
     bool index();
 
+    /* Wisp: upstream names these through `kitty.graphics.ImageStorage`. */
+    typedef terminal::kitty::graphics_storage::ImageStorage ImageStorage;
+    typedef ImageStorage::ScrollOp ScrollOp;
+
+    /* The operation when we have Kitty image placements during index.
+     * Split out of index() so its hot paths don't carry the adjustment
+     * state in their stack frame, which measurably slows the scroll
+     * hot path.
+     *
+     * Wisp: upstream's `comptime op` is a plain parameter. */
+    bool indexScrollWithImages(ScrollOp op);
+
+    /* Wisp: upstream's `KittyScrollMargins` selects a no-op stub when
+     * kitty_graphics is false; with the flag on it is just this. */
+    typedef ImageStorage::ScrollMargins KittyScrollMargins;
+
+    /* Begin adjusting kitty image placements for a scroll of the
+     * scrolling region by delta rows (negative moves content up). If
+     * adjustment is needed this returns state whose end() must be called
+     * after the scroll's row operations complete (see
+     * ImageStorage.scrollMarginsBegin for why this is two phases). This
+     * returns null when the scrolling region is the full screen, because
+     * placements then follow their anchored rows via pin tracking which
+     * matches kitty's marginless behavior.
+     *
+     * Callers must check that placements exist before calling, which
+     * keeps the cost on the hot scroll paths cheap. */
+    Maybe<KittyScrollMargins> kittyScrollMarginsBegin(int64_t delta, ScrollOp op);
+
+    /* Wisp: a `defer if (kitty_scroll) |*state| state.end();` guard. */
+    struct KittyScrollGuard {
+        Maybe<KittyScrollMargins> *state;
+        ~KittyScrollGuard() {
+            if (state->has) state->value.end();
+        }
+    };
+
     /* Insert amount spaces at the current cursor position. */
     void insertBlanks(size_t count);
 
@@ -627,6 +681,13 @@ struct Terminal {
 
     /* Clear all dirty bits. Testing only. */
     void clearDirty();
+
+    /* Set the storage size limit for Kitty graphics across all screens. */
+    void setKittyGraphicsSizeLimit(zigstd::Allocator alloc, size_t limit);
+
+    /* Set the allowed medium types for Kitty graphics image loading
+     * across all screens. */
+    void setKittyGraphicsLoadingLimits(terminal::kitty::graphics_image::LoadingImage::Limits limits);
 
     PageList::IncreaseCapacityError setAttribute(const terminal::sgr::Attribute &attr);
 
@@ -758,5 +819,10 @@ struct Terminal {
 } /* namespace wisp */
 
 #include "terminal_impl.hpp"
+
+/* Wisp: completes the `Terminal`-taking methods of
+ * kitty::graphics_storage::ImageStorage. See the note at the top of
+ * graphics_storage.hpp. */
+#include "../terminal/kitty/graphics_storage_impl.hpp"
 
 #endif /* WISP_VT_TERMINAL_HPP */
