@@ -155,8 +155,122 @@ inline bool Handler::dcsCommand(dcs::Command *cmd) {
         }
         break;
     }
+
+    case dcs::Command::Key::sixel: {
+        sixelCommand(cmd);
+        break;
+    }
     }
     return true;
+}
+
+/* Wisp: no upstream counterpart; Ghostty does not implement Sixel (see
+ * dcs.hpp's header). Decodes a buffered Sixel DCS body and stores the
+ * result as an image placed at the cursor.
+ *
+ * Where the image goes, and why: a decoded Sixel image is stored in the
+ * same place a Kitty graphics image is, `screens.active->kitty_images`,
+ * through the existing `ImageStorage`.
+ *
+ *   - It keeps one image pipeline, so placement, scrolling, eviction, the
+ *     storage byte limit and dirty tracking are shared rather than
+ *     duplicated for a second image kind.
+ *   - `ImageStorage` already repositions placement pins as the screen
+ *     scrolls and reaps them when they fall off the scrollback. Sixel
+ *     images need exactly that behavior, so a separate store would be a
+ *     second copy of the hardest part.
+ *
+ * The id comes from the storage's own allocation, `nextImageId(.implicit)`,
+ * which is the range reserved for images transmitted without an `i=` or
+ * `I=`. A Sixel body carries no client-chosen id, so this cannot collide
+ * with one; `implicit_id` is set for the same reason the Kitty path sets it
+ * on an unaddressable image.
+ *
+ * The placement goes at the cursor, which is where Sixel images go, and is
+ * pinned the same way a Kitty placement with no `P=` parent is.
+ *
+ * The decoder's `Options::defaults()` bounds (`max_width`, `max_height`,
+ * `max_pixels`) are used unchanged: every byte here comes from the pty. */
+inline void Handler::sixelCommand(dcs::Command *cmd) {
+    typedef kitty_graphics_storage::ImageStorage ImageStorage;
+    typedef kitty_graphics_image::Image StoredImage;
+
+    const zigstd::Allocator alloc = terminal->gpa();
+    ::wisp::vt::Screen *screen = terminal->screens.active;
+    ImageStorage *storage = &screen->kitty_images;
+
+    /* Image storage disabled means images are not supported at all, the
+     * same condition `graphics_exec::execute` refuses on. */
+    if (!storage->enabled()) return;
+
+    sixel::Options opts = sixel::Options::defaults();
+    opts.background_select = cmd->sixel.background_select;
+
+    sixel::Image decoded;
+    decoded.pixels = nullptr;
+    decoded.width = 0;
+    decoded.height = 0;
+    if (sixel::decode(alloc, (const char *)cmd->sixel.data.items, cmd->sixel.data.items_len,
+                      opts, &decoded) != sixel::Error::none) {
+        /* log.warn("sixel decode error: {}", .{err}); decode leaves
+         * `decoded` zeroed and leaks nothing on failure. */
+        return;
+    }
+
+    /* A body with no data bytes decodes to an empty image, which there is
+     * nothing to store or place. */
+    if (decoded.pixels == nullptr || decoded.width == 0 || decoded.height == 0) {
+        decoded.deinit(alloc);
+        return;
+    }
+
+    /* The decoder's limits are well under 2^32, but the cast is the only
+     * place the two size types meet, so it is checked rather than assumed. */
+    if (decoded.width > 0xFFFFFFFFu || decoded.height > 0xFFFFFFFFu) {
+        decoded.deinit(alloc);
+        return;
+    }
+
+    const size_t byte_len = decoded.width * decoded.height * 4;
+
+    StoredImage img;
+    img.id = storage->nextImageId(ImageStorage::NextImageIdMode::implicit);
+    img.number = 0;
+    img.width = (uint32_t)decoded.width;
+    img.height = (uint32_t)decoded.height;
+    img.format = kitty_graphics::Transmission::Format::rgba;
+    img.compression = kitty_graphics::Transmission::Compression::none;
+    img.data = StoredImage::Data::initComplete(decoded.pixels, byte_len);
+    /* No client-chosen id or number, so this image is unaddressable and
+     * must never receive a protocol response. */
+    img.metadata.implicit_id = true;
+
+    /* `sixel::Image::deinit` frees `width*height*4` bytes at alignment 1,
+     * which is byte-for-byte what `Image::Data::deinit` frees, so storage
+     * can take ownership of the pixels as they are. */
+    if (!storage->addImage(alloc, screen, img)) {
+        decoded.deinit(alloc);
+        return;
+    }
+    /* Storage owns the pixels from here; `decoded` must not free them. */
+    decoded.pixels = nullptr;
+    decoded.width = 0;
+    decoded.height = 0;
+
+    /* Place it at the cursor. The cursor pin is always tracked, but this
+     * placement must not move with the cursor, so it gets its own pin. */
+    ::wisp::vt::PageList::Pin *pin = screen->pages.trackPin(*screen->cursor.page_pin);
+    if (pin == nullptr) {
+        /* The image is stored but unplaced; a retransmission or a later
+         * placement can still reach it, and eviction will reclaim it. */
+        return;
+    }
+
+    ImageStorage::Placement p;
+    p.location = ImageStorage::Placement::Location::makePin(pin);
+    /* Everything else is the Kitty default: the whole image, its natural
+     * cell size, no offset within the cell, z-order 0. */
+    if (!storage->addPlacement(alloc, screen, img.id, 0, p)) p.deinit(screen);
 }
 
 inline bool Handler::dcsHook(const parser::Action::DCS &value) {
@@ -685,6 +799,35 @@ inline void Handler::apcEnd(bool terminated) {
             seq.apc.truncated = result.unknown.truncated;
             unknownSequence(seq);
         }
+        break;
+    }
+
+    case apc::Command::Key::kitty: {
+        /* Wisp: upstream calls `self.terminal.kittyGraphics(io, alloc,
+         * kitty_cmd)`, which is a one-line forwarder to
+         * `kitty.graphics.execute`. vt::Terminal has no such member here, so
+         * the forwarder is skipped and `graphics_exec::execute` is called
+         * directly; adding the method would mean editing vt/terminal.hpp.
+         * `?Response` is a bool plus an out parameter, and the quiet
+         * handling stays where upstream keeps it, inside `execute`, so a
+         * quiet command simply yields no response here. */
+        kitty_graphics::Response resp;
+        if (!kitty_graphics_exec::execute(alloc, terminal, &result.kitty, &resp)) break;
+
+        /* Don't waste time encoding if we can't write responses
+         * anyways. */
+        if (effects.write_pty == nullptr) break;
+
+        /* Encode and write the response if we have one.
+         * Wisp: upstream encodes into a fixed `[1024]u8` and appends a NUL
+         * because writePty takes a sentinel-terminated slice, then checks
+         * `final.len > 3` (the two-byte "_G" prefix plus that NUL).
+         * `Response.encode` writes into a std::string here and writePty
+         * takes a pointer and a length, so there is no buffer to overflow,
+         * no NUL to append, and the guard is the same bound without it. */
+        std::string buf;
+        resp.encode(&buf);
+        if (buf.size() > 2) writePty(buf.data(), buf.size());
         break;
     }
     }

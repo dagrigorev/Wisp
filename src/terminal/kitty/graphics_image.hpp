@@ -79,15 +79,35 @@
 
 /* Wisp: the Win32 surface the file and temporary-file mediums need. See
  * the I/O seam note above for why these are declared rather than
- * included. */
+ * included.
+ *
+ * Wisp: every prototype here matches windows.h's exactly, so a translation
+ * unit that pulls windows.h in as well — which screen.hpp's consumers now
+ * do, since Screen carries the Kitty image storage — sees a redeclaration
+ * rather than an `extern "C"` overload (MSVC C2733), in either include
+ * order. Two consequences:
+ *
+ *   - the pointer parameters that are only ever passed null name
+ *     windows.h's pointee types (`LPSECURITY_ATTRIBUTES`, `LPOVERLAPPED`)
+ *     rather than `void *`;
+ *   - `SetFilePointerEx` and `GetFileSizeEx` take or return a
+ *     `LARGE_INTEGER`, a *union* that cannot be declared compatibly
+ *     without windows.h's definition, so `seekTo` and `stat` below use
+ *     `SetFilePointer` and `GetFileSize`, whose prototypes are scalar
+ *     throughout. Those are the same operations split across a low and a
+ *     high 32-bit half, with `GetLastError` disambiguating the in-band
+ *     0xFFFFFFFF failure value, as the Win32 docs require. */
+struct _SECURITY_ATTRIBUTES;
+struct _OVERLAPPED;
 extern "C" {
 __declspec(dllimport) void *__stdcall CreateFileW(const wchar_t *, unsigned long, unsigned long,
-                                                  void *, unsigned long, unsigned long, void *);
+                                                  struct _SECURITY_ATTRIBUTES *, unsigned long,
+                                                  unsigned long, void *);
 __declspec(dllimport) int __stdcall CloseHandle(void *);
 __declspec(dllimport) int __stdcall ReadFile(void *, void *, unsigned long, unsigned long *,
-                                             void *);
-__declspec(dllimport) int __stdcall SetFilePointerEx(void *, long long, long long *,
-                                                     unsigned long);
+                                             struct _OVERLAPPED *);
+__declspec(dllimport) unsigned long __stdcall SetFilePointer(void *, long, long *, unsigned long);
+__declspec(dllimport) unsigned long __stdcall GetLastError(void);
 __declspec(dllimport) unsigned long __stdcall GetFileType(void *);
 __declspec(dllimport) unsigned long __stdcall GetFinalPathNameByHandleW(void *, wchar_t *,
                                                                        unsigned long,
@@ -98,7 +118,7 @@ __declspec(dllimport) int __stdcall MultiByteToWideChar(unsigned int, unsigned l
 __declspec(dllimport) int __stdcall WideCharToMultiByte(unsigned int, unsigned long,
                                                         const wchar_t *, int, char *, int,
                                                         const char *, int *);
-__declspec(dllimport) int __stdcall GetFileSizeEx(void *, long long *);
+__declspec(dllimport) unsigned long __stdcall GetFileSize(void *, unsigned long *);
 __declspec(dllimport) unsigned long __stdcall GetFileAttributesW(const wchar_t *);
 }
 
@@ -243,8 +263,12 @@ inline void closeFile(Handle h) {
 /* Wisp: std.Io.File.stat(io), reduced to the two fields this file reads:
  * whether the kind is `.file` and the size in bytes. */
 inline bool stat(Handle h, bool *is_file, uint64_t *size) {
-    long long sz = 0;
-    if (::GetFileSizeEx(h, &sz) == 0) return false;
+    /* Wisp: GetFileSizeEx in two halves, see the declaration note. */
+    unsigned long size_high = 0;
+    const unsigned long size_low = ::GetFileSize(h, &size_high);
+    if (size_low == 0xFFFFFFFFul && ::GetLastError() != 0ul) return false;
+    const long long sz = (long long)(((unsigned long long)size_high << 32) |
+                                     (unsigned long long)size_low);
     /* FILE_TYPE_DISK is 1. A pipe or character device is not a regular
      * file, and neither is a directory. */
     const unsigned long type = ::GetFileType(h);
@@ -292,7 +316,12 @@ inline bool realPath(Allocator alloc, Handle h, char *buf, size_t buf_len, size_
 /* Wisp: std.Io.File.Reader.seekTo(offset). */
 inline bool seekTo(Handle h, uint64_t offset) {
     if (offset > (uint64_t)0x7FFFFFFFFFFFFFFFull) return false;
-    return ::SetFilePointerEx(h, (long long)offset, nullptr, 0ul /* FILE_BEGIN */) != 0;
+    /* Wisp: SetFilePointerEx in two halves, see the declaration note. */
+    long distance_high = (long)(unsigned long)(offset >> 32);
+    const unsigned long distance_low = (unsigned long)(offset & 0xFFFFFFFFull);
+    const unsigned long moved =
+        ::SetFilePointer(h, (long)distance_low, &distance_high, 0ul /* FILE_BEGIN */);
+    return !(moved == 0xFFFFFFFFul && ::GetLastError() != 0ul);
 }
 
 /* Wisp: one std.Io.Reader read; `*out_read` short of `len` means end of

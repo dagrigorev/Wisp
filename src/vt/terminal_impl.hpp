@@ -1243,6 +1243,9 @@ inline bool Terminal::index() {
      * we create scrollback. */
     if (screen->cursor.y == scrolling_region.bottom && screen->cursor.x >= scrolling_region.left &&
         screen->cursor.x <= scrolling_region.right) {
+        /* Scrolling dirties the images because it updates their placements pins. */
+        screen->kitty_images.dirty = true;
+
         /* If our scrolling region is at the top, we create scrollback,
          * but only if our screen retains scrollback. If our screen
          * doesn't retain scrollback (e.g. the alternate screen) then
@@ -1253,6 +1256,15 @@ inline bool Terminal::index() {
          * handle (and cursorDownScroll special-cases). */
         if (scrolling_region.top == 0 && scrolling_region.left == 0 && scrolling_region.right == cols - 1 &&
             (!screen->no_scrollback || scrolling_region.bottom == 0)) {
+            /* If a bottom margin is set, kitty image placements may
+             * need adjusting around the scroll. The rare placements-
+             * present case is handled out of line so this hot path
+             * only pays a count check (a load from a cache line we
+             * already write, above). */
+            if (screen->kitty_images.placements.count() != 0) {
+                return indexScrollWithImages(ScrollOp::window_shift);
+            }
+
             return screen->cursorScrollAbove();
         }
 
@@ -1260,6 +1272,12 @@ inline bool Terminal::index() {
          * scrollUp handles the kitty image adjustment itself. */
         if (scrolling_region.left != 0 || scrolling_region.right != cols - 1) {
             return scrollUp(1);
+        }
+
+        /* Kitty image placements may need adjusting around the scroll;
+         * handled out of line like the scrollback path above. */
+        if (screen->kitty_images.placements.count() != 0) {
+            return indexScrollWithImages(ScrollOp::in_place);
         }
 
         /* Otherwise use a fast path function to efficiently scroll
@@ -1272,6 +1290,46 @@ inline bool Terminal::index() {
         screen->cursorDown(1);
     }
     return true;
+}
+
+/* The operation when we have Kitty image placements during index.
+ * Split out of index() so its hot paths don't carry the adjustment
+ * state in their stack frame, which measurably slows the scroll
+ * hot path. */
+inline bool Terminal::indexScrollWithImages(ScrollOp op) {
+    Maybe<KittyScrollMargins> kitty_scroll = kittyScrollMarginsBegin(-1, op);
+    KittyScrollGuard guard = {&kitty_scroll};
+    (void)guard;
+    switch (op) {
+    case ScrollOp::window_shift: return screens.active->cursorScrollAbove();
+    case ScrollOp::in_place:
+        return screens.active->cursorScrollRegionUp(
+            (size_t)(scrolling_region.bottom - scrolling_region.top));
+    }
+    /* Wisp: unreachable upstream; every ScrollOp is handled above. */
+    return true;
+}
+
+/* Begin adjusting kitty image placements for a scroll of the
+ * scrolling region by delta rows (negative moves content up). If
+ * adjustment is needed this returns state whose end() must be called
+ * after the scroll's row operations complete (see
+ * ImageStorage.scrollMarginsBegin for why this is two phases). This
+ * returns null when the scrolling region is the full screen, because
+ * placements then follow their anchored rows via pin tracking which
+ * matches kitty's marginless behavior.
+ *
+ * Callers must check that placements exist before calling, which
+ * keeps the cost on the hot scroll paths cheap. */
+inline Maybe<Terminal::KittyScrollMargins> Terminal::kittyScrollMarginsBegin(int64_t delta, ScrollOp op) {
+    /* Full-screen scrolls need no adjustment: placements follow their
+     * anchored rows (possibly into the scrollback) via pin tracking. */
+    if (scrolling_region.top == 0 && scrolling_region.bottom == rows - 1 &&
+        scrolling_region.left == 0 && scrolling_region.right == cols - 1)
+        return Maybe<KittyScrollMargins>::none();
+
+    Screen *screen = screens.active;
+    return Maybe<KittyScrollMargins>(screen->kitty_images.scrollMarginsBegin(this, delta, op));
 }
 
 /* Move the cursor to the previous line in the scrolling region, possibly
@@ -1409,6 +1467,19 @@ inline void Terminal::scrollDown(size_t count) {
     } restore = {this, screens.active->cursor.x, screens.active->cursor.y, screens.active->cursor.pending_wrap};
     (void)restore;
 
+    /* If margins are set and kitty image placements exist, they need
+     * adjusting around the scroll. Note this wraps scrollDown and NOT
+     * insertLines: kitty scrolls images for SD/RI but leaves them
+     * alone for IL/DL. */
+    Maybe<KittyScrollMargins> kitty_scroll = Maybe<KittyScrollMargins>::none();
+    KittyScrollGuard kitty_guard = {&kitty_scroll};
+    (void)kitty_guard;
+    if (screens.active->kitty_images.placements.count() != 0) {
+        const size_t region_height = (size_t)(scrolling_region.bottom - scrolling_region.top) + 1;
+        kitty_scroll = kittyScrollMarginsBegin(
+            (int64_t)(count < region_height ? count : region_height), ScrollOp::in_place);
+    }
+
     /* Move to the top of the scroll region */
     screens.active->cursorAbsolute(scrolling_region.left, scrolling_region.top);
     insertLines(count);
@@ -1435,6 +1506,28 @@ inline bool Terminal::scrollUp(size_t count) {
     } restore = {this, screens.active->cursor.x, screens.active->cursor.y, screens.active->cursor.pending_wrap};
     (void)restore;
 
+    /* If margins are set and kitty image placements exist, they need
+     * adjusting around the scroll. Note this wraps scrollUp and NOT
+     * deleteLines: kitty scrolls images for SU/IND but leaves them
+     * alone for IL/DL. */
+    Maybe<KittyScrollMargins> kitty_scroll = Maybe<KittyScrollMargins>::none();
+    KittyScrollGuard kitty_guard = {&kitty_scroll};
+    (void)kitty_guard;
+    if (screens.active->kitty_images.placements.count() != 0) {
+        /* The op must mirror the branch below: the scrollback path
+         * shifts the active window while the deleteLines path
+         * moves rows in place. */
+        const size_t region_height = (size_t)(scrolling_region.bottom - scrolling_region.top) + 1;
+        const ScrollOp op =
+            (scrolling_region.top == 0 && scrolling_region.left == 0 &&
+             scrolling_region.right == cols - 1 &&
+             (!screens.active->no_scrollback || scrolling_region.bottom == rows - 1))
+                ? ScrollOp::window_shift
+                : ScrollOp::in_place;
+        kitty_scroll = kittyScrollMarginsBegin(
+            -(int64_t)(count < region_height ? count : region_height), op);
+    }
+
     /* If our scroll region is at the top and we have no left/right
      * margins then we move the scrolled out text into the scrollback.
      *
@@ -1445,6 +1538,9 @@ inline bool Terminal::scrollUp(size_t count) {
      * (cursorDownScroll) for scrolling without scrollback. */
     if (scrolling_region.top == 0 && scrolling_region.left == 0 && scrolling_region.right == cols - 1 &&
         (!screens.active->no_scrollback || scrolling_region.bottom == rows - 1)) {
+        /* Scrolling dirties the images because it updates their placements pins. */
+        screens.active->kitty_images.dirty = true;
+
         /* Clamp count to the scroll region height. */
         const size_t region_height = (size_t)(scrolling_region.bottom + 1);
         const size_t adjusted_count = count < region_height ? count : region_height;
@@ -1622,6 +1718,9 @@ inline void Terminal::insertLines(size_t count) {
         screens.active->cursor.x < scrolling_region.left || screens.active->cursor.x > scrolling_region.right)
         return;
 
+    /* Scrolling dirties the images because it updates their placements pins. */
+    screens.active->kitty_images.dirty = true;
+
     /* At the end we need to return the cursor to the row it started on. */
     struct Restore {
         Terminal *t;
@@ -1780,6 +1879,9 @@ inline void Terminal::deleteLines(size_t count) {
     if (screens.active->cursor.y < scrolling_region.top || screens.active->cursor.y > scrolling_region.bottom ||
         screens.active->cursor.x < scrolling_region.left || screens.active->cursor.x > scrolling_region.right)
         return;
+
+    /* Scrolling dirties the images because it updates their placements pins. */
+    screens.active->kitty_images.dirty = true;
 
     /* At the end we need to return the cursor to the row it started on. */
     struct Restore {
@@ -2207,6 +2309,10 @@ inline void Terminal::eraseDisplay(terminal::csi::EraseDisplay mode, bool protec
 
         /* Unsets pending wrap state */
         screens.active->cursor.pending_wrap = false;
+
+        /* Clear only placements still visible after moving the active
+         * area into scrollback. */
+        screens.active->kitty_images.clearScreen(screens.active->alloc, this);
         break;
     }
 
@@ -2252,6 +2358,10 @@ inline void Terminal::eraseDisplay(terminal::csi::EraseDisplay mode, bool protec
 
         /* Unsets pending wrap state */
         screens.active->cursor.pending_wrap = false;
+
+        /* ED2 clears visible placements but preserves graphics that
+         * are wholly in scrollback. */
+        screens.active->kitty_images.clearScreen(screens.active->alloc, this);
 
         /* Cleared screen dirty bit */
         flags.dirty.clear = true;
@@ -2358,6 +2468,29 @@ inline bool Terminal::decaln() {
     /* Reset the cursor to the top-left */
     setCursorPos(1, 1);
     return true;
+}
+
+/* Set the storage size limit for Kitty graphics across all screens. */
+inline void Terminal::setKittyGraphicsSizeLimit(zigstd::Allocator alloc, size_t limit) {
+    /* Wisp: upstream's `self.screens.all.iterator()` over an EnumMap
+     * visits only the initialized screens; the port's array carries a
+     * null for an uninitialized one. */
+    for (size_t i = 0; i < ScreenSet::key_count; i += 1) {
+        Screen *screen = screens.all[i];
+        if (screen == nullptr) continue;
+        screen->kitty_images.setLimit(alloc, screen, limit);
+    }
+}
+
+/* Set the allowed medium types for Kitty graphics image loading
+ * across all screens. */
+inline void Terminal::setKittyGraphicsLoadingLimits(
+    terminal::kitty::graphics_image::LoadingImage::Limits limits) {
+    for (size_t i = 0; i < ScreenSet::key_count; i += 1) {
+        Screen *screen = screens.all[i];
+        if (screen == nullptr) continue;
+        screen->kitty_images.image_limits = limits;
+    }
 }
 
 inline PageList::IncreaseCapacityError Terminal::setAttribute(const terminal::sgr::Attribute &attr) {
@@ -2656,8 +2789,11 @@ inline Terminal::ResizeError Terminal::resize(zigstd::Allocator alloc, const Res
              * we just go back to the primary screen. Not great, but best
              * we can do. */
             if (tw::check(ResizeTw::alternate_screen_init) != ResizeError::none) break;
-            Screen *replacement = screens.getInit(
-                alloc, ScreenSet::Key::alternate, Screen::Options(opts.cols, opts.rows, (size_t)0));
+            /* Inherit our Kitty image settings from the primary screen. */
+            Screen::Options replacement_opts(opts.cols, opts.rows, (size_t)0);
+            replacement_opts.kitty_image_storage_limit = primary->kitty_images.total_limit;
+            replacement_opts.kitty_image_loading_limits = primary->kitty_images.image_limits;
+            Screen *replacement = screens.getInit(alloc, ScreenSet::Key::alternate, replacement_opts);
             if (!replacement) {
                 /* log.warn("alternate screen replacement failed, falling back to primary err={}") */
                 break;
@@ -2767,7 +2903,12 @@ inline Screen *Terminal::switchScreen(ScreenSet::Key key, bool *ok) {
         const Maybe<size_t> max_scrollback_bytes = key == ScreenSet::Key::primary
                                                        ? Maybe<size_t>(primary->pages.limits.bytes.explicit_)
                                                        : Maybe<size_t>((size_t)0);
-        new_ = screens.getInit(old->alloc, key, Screen::Options(cols, rows, max_scrollback_bytes));
+        /* Inherit our Kitty image settings from the primary
+         * screen if we have to initialize. */
+        Screen::Options new_opts(cols, rows, max_scrollback_bytes);
+        new_opts.kitty_image_storage_limit = primary->kitty_images.total_limit;
+        new_opts.kitty_image_loading_limits = primary->kitty_images.image_limits;
+        new_ = screens.getInit(old->alloc, key, new_opts);
         if (!new_) {
             *ok = false;
             return nullptr;
@@ -2782,6 +2923,11 @@ inline Screen *Terminal::switchScreen(ScreenSet::Key key, bool *ok) {
 
     /* Clear our selection */
     new_->clearSelection();
+
+    /* Mark kitty images as dirty so they redraw. Without this set
+     * the images will remain where they were (the dirty bit on
+     * the screen only tracks the terminal grid, not the images). */
+    new_->kitty_images.dirty = true;
 
     /* Mark our terminal as dirty to redraw the grid. */
     flags.dirty.clear = true;
@@ -3093,6 +3239,12 @@ inline bool Terminal::printSliceFast(const uint32_t *cps, size_t cps_len, bool g
 
     if (!allow_unicode) return true;
 
+    /* The Kitty graphics placeholder requires row bookkeeping.
+     *
+     * Wisp: the codepoint is spelled out for the same reason as in
+     * `print`; see the note there. */
+    if (cp0 == 0x10EEEE) return true;
+
     /* The first codepoint requires care when grapheme clustering is
      * enabled: print() may attach it to the previous *cell* instead
      * of writing a new one. Take the first codepoint only when we can
@@ -3147,6 +3299,11 @@ inline bool Terminal::printSliceFast(const uint32_t *cps, size_t cps_len, bool g
  * fast path with the given width class. */
 inline bool Terminal::printSliceEligible(uint32_t cp, PrintSliceWidth width) {
     assert(cp > 0xFF);
+
+    /* Wisp: the codepoint is spelled out for the same reason as in
+     * `print`; see the note there. */
+    if (cp == 0x10EEEE) return false;
+
     return unicode::Table::get(cp).width() == (width == PrintSliceWidth::narrow ? 1 : 2);
 }
 

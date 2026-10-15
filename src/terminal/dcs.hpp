@@ -17,6 +17,19 @@
  *     max_response_bytes stays as upstream's documented bound and the
  *     test still asserts the response fits it.
  *   - log.* has no sink yet and is a comment.
+ *
+ * Wisp, original work with no upstream counterpart: the Sixel prong
+ * (`StateKey::sixel`, `Command::Sixel`, and the zero-intermediate `q`
+ * branch of `tryHook`). Ghostty does not implement Sixel at all -- the
+ * entire upstream tree at the pinned revision mentions it exactly once, as
+ * `sixel = 4` in device_attributes.zig, which is only the capability number
+ * reported in a Device Attributes reply. There is therefore nothing to
+ * transliterate, and this prong is written to the published format
+ * description (DEC STD 070, and the VT330/VT340 Programmer Reference Manual
+ * EK-VT3XX-GP-002 volume 1 chapter 14 "Sixel Graphics"), in the same spirit
+ * as src/terminal/sixel.hpp itself. It buffers the DCS body and hands it to
+ * `sixel::decode` at ST; see `Handler::sixelCommand` in
+ * stream_terminal_impl.hpp for where the decoded image goes.
  */
 
 #pragma once
@@ -34,6 +47,7 @@
 #include "../zigstd/allocator.hpp"
 #include "../zigstd/array_list.hpp"
 #include "parser.hpp"
+#include "sixel.hpp"
 
 namespace wisp {
 namespace terminal {
@@ -48,6 +62,26 @@ struct Command {
 
         /* DECRQSS */
         decrqss,
+
+        /* Wisp: Sixel graphics; no upstream counterpart. */
+        sixel,
+    };
+
+    /* Wisp: the buffered body of a Sixel DCS, plus the only DCS parameter
+     * the decoder needs. No upstream counterpart. */
+    struct Sixel {
+        zigstd::ArrayListUnmanaged<uint8_t> data;
+        zigstd::Allocator alloc;
+
+        /* P2 from `DCS P1;P2;P3 q`: 1 means a zero bit leaves the pixel
+         * untouched, 0 and 2 mean it paints the background. */
+        ::wisp::terminal::sixel::BackgroundSelect background_select;
+
+        Sixel()
+            : data(), alloc(zigstd::c_allocator()),
+              background_select(::wisp::terminal::sixel::BackgroundSelect::paint) {}
+
+        void deinit() { data.deinit(alloc); }
     };
 
     struct XTGETTCAP {
@@ -106,13 +140,15 @@ struct Command {
     Key key;
     XTGETTCAP xtgettcap;
     DECRQSS decrqss;
+    Sixel sixel;
 
-    Command() : key(Key::decrqss), xtgettcap(), decrqss(DECRQSS::none) {}
+    Command() : key(Key::decrqss), xtgettcap(), decrqss(DECRQSS::none), sixel() {}
 
     void deinit() {
         switch (key) {
         case Key::xtgettcap: xtgettcap.deinit(); break;
         case Key::decrqss: break;
+        case Key::sixel: sixel.deinit(); break;
         }
     }
 
@@ -183,6 +219,9 @@ enum class StateKey : uint8_t {
 
     /* DECRQSS */
     decrqss,
+
+    /* Wisp: Sixel graphics; no upstream counterpart. */
+    sixel,
 };
 
 struct State {
@@ -197,10 +236,21 @@ struct State {
         uint8_t len; /* = 0 */
     } decrqss;
 
+    /* Wisp: Sixel; no upstream counterpart. The body is buffered verbatim
+     * and decoded at unhook, because the decoder works on the whole body:
+     * a raster attribute or a repeat introducer can change the size of
+     * everything that follows it. */
+    struct {
+        zigstd::ArrayListUnmanaged<uint8_t> data;
+        ::wisp::terminal::sixel::BackgroundSelect background_select;
+    } sixel;
+
     State() : key(StateKey::inactive), xtgettcap() {
         decrqss.data[0] = 0;
         decrqss.data[1] = 0;
         decrqss.len = 0;
+        sixel.data = zigstd::ArrayListUnmanaged<uint8_t>();
+        sixel.background_select = ::wisp::terminal::sixel::BackgroundSelect::paint;
     }
 
     void deinit(zigstd::Allocator alloc) {
@@ -210,6 +260,7 @@ struct State {
 
         case StateKey::xtgettcap: xtgettcap.deinit(alloc); break;
         case StateKey::decrqss: break;
+        case StateKey::sixel: sixel.data.deinit(alloc); break;
         }
     }
 };
@@ -253,7 +304,30 @@ struct Handler {
         case 0:
             /* Wisp: tmux control mode ('p') is gated on
              * build_options.tmux_control_mode, which this build disables. */
-            return true;
+            switch (dcs.final_) {
+            /* Wisp: Sixel graphics, `DCS P1;P2;P3 q <body> ST`. No upstream
+             * counterpart; see this file's header. */
+            case 'q': {
+                Hook hk;
+                hk.state.key = StateKey::sixel;
+                /* P2 selects what a zero bit means. 1 is transparent; 0 and
+                 * 2 both paint the background, and an absent or empty
+                 * parameter is 0 by DEC's default-parameter rule. Anything
+                 * else is out of range for P2 and is treated as the
+                 * default, which is what an unrecognised parameter value
+                 * does elsewhere in the format. */
+                namespace sx = ::wisp::terminal::sixel;
+                hk.state.sixel.background_select = sx::BackgroundSelect::paint;
+                if (dcs.params_len >= 2 && dcs.params[1] == 1) {
+                    hk.state.sixel.background_select = sx::BackgroundSelect::transparent;
+                }
+                *out = hk;
+                *has_hook = true;
+                return true;
+            }
+
+            default: return true;
+            }
 
         case 1:
             switch (dcs.intermediates[0]) {
@@ -350,6 +424,24 @@ struct Handler {
             state.decrqss.len += 1;
             break;
         }
+
+        /* Wisp: Sixel; no upstream counterpart. The body is bounded by the
+         * same `max_bytes` every other DCS payload is: these bytes come
+         * from the pty, so an unterminated DCS must not be able to buffer
+         * without limit. Exceeding it is an error, which discards the
+         * state and ignores the rest of the sequence, exactly as an
+         * over-long XTGETTCAP does. */
+        case StateKey::sixel: {
+            if (state.sixel.data.items_len >= max_bytes) {
+                *err = true;
+                return false;
+            }
+            if (!state.sixel.data.append(alloc, byte)) {
+                *err = true;
+                return false;
+            }
+            break;
+        }
         }
 
         return false;
@@ -423,6 +515,22 @@ struct Handler {
                 break;
             default: cmd.decrqss = Command::DECRQSS::none; break;
             }
+            *out = cmd;
+            result = true;
+            break;
+        }
+
+        /* Wisp: Sixel; no upstream counterpart. Ownership of the buffered
+         * body moves into the command, like XTGETTCAP above, so the state
+         * is purposely not deinited here. An empty body still produces a
+         * command; the decoder turns it into an empty image, which the
+         * caller then declines to store. */
+        case StateKey::sixel: {
+            Command cmd;
+            cmd.key = Command::Key::sixel;
+            cmd.sixel.data = state.sixel.data;
+            cmd.sixel.alloc = alloc;
+            cmd.sixel.background_select = state.sixel.background_select;
             *out = cmd;
             result = true;
             break;

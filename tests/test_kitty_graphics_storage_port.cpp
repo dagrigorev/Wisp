@@ -40,24 +40,13 @@
  *         `eraseDisplay` and then that exact `clearScreen` call. Every
  *         upstream assertion is kept.
  *
- *       * the 11 scroll-margin tests rely on Terminal wrapping IND / RI /
- *         SU / SD in `kittyScrollMarginsBegin` + `ScrollMargins.end()`
- *         (Terminal.zig `indexScrollWithImages`, `scrollUp`, `scrollDown`,
- *         `kittyScrollMarginsBegin`). The `kittyIndex` / `kittyReverseIndex`
- *         / `kittyScrollUp` / `kittyScrollDown` helpers below reproduce
- *         that wrapping verbatim around the real `Terminal` calls, so the
- *         tests exercise the ported `scrollMarginsBegin`/`end` on the same
- *         row operations and with the same `ScrollOp` upstream picks. IL/DL
- *         are deliberately left unwrapped, as upstream leaves them. Every
- *         upstream assertion is kept.
- *
- *         One ordering difference: upstream's `scrollUp`/`scrollDown`
- *         declare the cursor-restore `defer` before the kitty one, so Zig
- *         runs `ScrollMargins.end()` *before* the cursor is restored. The
- *         helpers here call `t.scrollUp(...)` (which restores the cursor
- *         itself) and then `end()`. `end()` only repositions tracked pins
- *         from active-area coordinates and never reads the cursor, so the
- *         result is identical.
+ *       * the 11 scroll-margin tests call Terminal's own IND / RI / SU / SD
+ *         directly, as upstream does. They used to go through local
+ *         helpers that reproduced Terminal's kitty wrapping, because the
+ *         port omitted it while kitty_graphics was off; that wrapping is
+ *         restored now, so the helpers were deleted. Keeping them would
+ *         have applied scrollMarginsBegin/end twice -- which is exactly
+ *         what happened, and what these tests caught.
  *
  *   - `ImageStorage.delete` is `delete_` (`delete` is a C++ keyword) and
  *     `Placement.Location.virtual` is `virtual_`.
@@ -78,9 +67,11 @@
 #include <string.h>
 
 #include "test_helpers.h"
-#include "../terminal/kitty/graphics_storage.hpp"
-#include "../vt/screen_impl.hpp"
-#include "../vt/terminal_impl.hpp"
+/* Wisp: graphics_storage.hpp only declares the methods that take a
+ * `Screen` or a `Terminal`; graphics_storage_impl.hpp completes them and
+ * pulls in screen.hpp and terminal.hpp. See the note at the top of
+ * graphics_storage.hpp. */
+#include "../terminal/kitty/graphics_storage_impl.hpp"
 #include "../zigstd/allocator.hpp"
 
 using namespace wisp;
@@ -129,18 +120,15 @@ struct TermHolder {
     ASSERT_TRUE(v##_holder.ok);                                                                    \
     Terminal &v = v##_holder.t
 
-/* Wisp: var s: ImageStorage = .{}; defer s.deinit(alloc, t.screens.active); */
-struct StorageHolder {
-    ImageStorage s;
-    zigstd::Allocator alloc;
-    Screen *screen;
-    StorageHolder(zigstd::Allocator a, Screen *sc) : alloc(a), screen(sc) {}
-    ~StorageHolder() { s.deinit(alloc, screen); }
-};
-
-#define STORAGE(v, t)                                                                              \
-    StorageHolder v##_holder(talloc(), (t).screens.active);                                        \
-    ImageStorage &v = v##_holder.s
+/* Upstream: `const storage = &t.screens.active.kitty_images;`
+ *
+ * Wisp: these tests used to build a standalone ImageStorage, because Screen
+ * carried kitty_images as an empty struct while kitty_graphics was off. The
+ * field exists now, so they use it, as upstream does -- and they have to:
+ * scrollMarginsBegin asserts `this == &s->kitty_images`, which a
+ * test-owned storage fails. The screen owns it, so nothing here deinits
+ * it; Screen::deinit does. */
+#define STORAGE(v, t) ImageStorage &v = (t).screens.active->kitty_images
 
 /* Our pin for the placement */
 static Pin *trackPin(Terminal *t, const point::Coordinate &pt) {
@@ -280,97 +268,6 @@ static Action actRange(uint32_t first, uint32_t last, bool del) {
 
 /* ── Wisp: Terminal.zig's kitty scroll wrapping, see the header note. ── */
 
-static bool kittyScrollUp(ImageStorage &s, Terminal &t, size_t count);
-
-/* Full-screen scrolls need no adjustment: placements follow their
- * anchored rows (possibly into the scrollback) via pin tracking. */
-static bool kittyScrollMarginsBegin(ImageStorage &s, Terminal &t, int64_t delta,
-                                    ImageStorage::ScrollOp op,
-                                    ImageStorage::ScrollMargins *out) {
-    if (t.scrolling_region.top == 0 && t.scrolling_region.bottom == t.rows - 1 &&
-        t.scrolling_region.left == 0 && t.scrolling_region.right == t.cols - 1)
-        return false;
-    *out = s.scrollMarginsBegin(&t, delta, op);
-    return true;
-}
-
-static bool kittyIndex(ImageStorage &s, Terminal &t) {
-    Screen *screen = t.screens.active;
-
-    /* The index() branch that scrolls: cursor inside the region, on its
-     * bottom-most row, within the left/right margins. */
-    const bool scrolls = screen->cursor.y >= t.scrolling_region.top &&
-                         screen->cursor.y == t.scrolling_region.bottom &&
-                         screen->cursor.x >= t.scrolling_region.left &&
-                         screen->cursor.x <= t.scrolling_region.right;
-    if (!scrolls || s.placements.count() == 0) return t.index();
-
-    /* Slow path for left and right scrolling region margins.
-     * scrollUp handles the kitty image adjustment itself. */
-    if (t.scrolling_region.left != 0 || t.scrolling_region.right != t.cols - 1)
-        return kittyScrollUp(s, t, 1);
-
-    const ImageStorage::ScrollOp op =
-        (t.scrolling_region.top == 0 &&
-         (!screen->no_scrollback || t.scrolling_region.bottom == 0))
-            ? ImageStorage::ScrollOp::window_shift
-            : ImageStorage::ScrollOp::in_place;
-
-    ImageStorage::ScrollMargins st;
-    const bool has = kittyScrollMarginsBegin(s, t, -1, op, &st);
-    const bool ok = t.index();
-    if (has) st.end();
-    return ok;
-}
-
-static bool kittyScrollUp(ImageStorage &s, Terminal &t, size_t count) {
-    ImageStorage::ScrollMargins st;
-    bool has = false;
-    if (s.placements.count() != 0) {
-        /* The op must mirror the branch below: the scrollback path
-         * shifts the active window while the deleteLines path
-         * moves rows in place. */
-        const size_t region_height =
-            (size_t)(t.scrolling_region.bottom - t.scrolling_region.top) + 1;
-        const size_t n = count < region_height ? count : region_height;
-        const ImageStorage::ScrollOp op =
-            (t.scrolling_region.top == 0 && t.scrolling_region.left == 0 &&
-             t.scrolling_region.right == t.cols - 1 &&
-             (!t.screens.active->no_scrollback ||
-              t.scrolling_region.bottom == t.rows - 1))
-                ? ImageStorage::ScrollOp::window_shift
-                : ImageStorage::ScrollOp::in_place;
-        has = kittyScrollMarginsBegin(s, t, -(int64_t)n, op, &st);
-    }
-    const bool ok = t.scrollUp(count);
-    if (has) st.end();
-    return ok;
-}
-
-static void kittyScrollDown(ImageStorage &s, Terminal &t, size_t count) {
-    ImageStorage::ScrollMargins st;
-    bool has = false;
-    if (s.placements.count() != 0) {
-        const size_t region_height =
-            (size_t)(t.scrolling_region.bottom - t.scrolling_region.top) + 1;
-        const size_t n = count < region_height ? count : region_height;
-        has = kittyScrollMarginsBegin(s, t, (int64_t)n, ImageStorage::ScrollOp::in_place, &st);
-    }
-    t.scrollDown(count);
-    if (has) st.end();
-}
-
-static void kittyReverseIndex(ImageStorage &s, Terminal &t) {
-    Screen *screen = t.screens.active;
-    if (screen->cursor.y != t.scrolling_region.top ||
-        screen->cursor.x < t.scrolling_region.left ||
-        screen->cursor.x > t.scrolling_region.right) {
-        t.reverseIndex();
-        return;
-    }
-
-    kittyScrollDown(s, t, 1);
-}
 
 /* ── Tests ────────────────────────────────────────────────────────── */
 
@@ -1772,7 +1669,7 @@ TEST(kitty_graphics_storage, storage_scroll_margins_placement_inside_region_scro
     t.setCursorPos(5, 1);
 
     /* Entirely inside: moves up with the content. */
-    ASSERT_TRUE(kittyIndex(storage, t));
+    ASSERT_TRUE(t.index());
     {
         Placement p;
         ASSERT_TRUE(storage.placements.get(extKey(1, 1), &p));
@@ -1784,7 +1681,7 @@ TEST(kitty_graphics_storage, storage_scroll_margins_placement_inside_region_scro
 
     /* Would extend above the top margin: anchored at the top margin
      * with the top cell row clipped off the source. */
-    ASSERT_TRUE(kittyIndex(storage, t));
+    ASSERT_TRUE(t.index());
     {
         Placement p;
         ASSERT_TRUE(storage.placements.get(extKey(1, 1), &p));
@@ -1797,7 +1694,7 @@ TEST(kitty_graphics_storage, storage_scroll_margins_placement_inside_region_scro
     }
 
     /* Fully clipped: deleted. */
-    ASSERT_TRUE(kittyIndex(storage, t));
+    ASSERT_TRUE(t.index());
     ASSERT_EQ(0, storage.placements.count());
     /* The image itself is retained. */
     ASSERT_EQ(1, storage.images.count());
@@ -1819,7 +1716,7 @@ TEST(kitty_graphics_storage, storage_scroll_margins_placement_straddling_region_
     t.setTopAndBottomMargin(1, 2);
     t.setCursorPos(2, 1);
 
-    ASSERT_TRUE(kittyIndex(storage, t));
+    ASSERT_TRUE(t.index());
     Placement p;
     ASSERT_TRUE(storage.placements.get(extKey(1, 1), &p));
     const Maybe<point::Point> pt =
@@ -1845,8 +1742,8 @@ TEST(kitty_graphics_storage, storage_scroll_margins_placement_below_region_does_
     t.setTopAndBottomMargin(1, 4);
     t.setCursorPos(4, 1);
 
-    ASSERT_TRUE(kittyIndex(storage, t));
-    ASSERT_TRUE(kittyIndex(storage, t));
+    ASSERT_TRUE(t.index());
+    ASSERT_TRUE(t.index());
     Placement p;
     ASSERT_TRUE(storage.placements.get(extKey(1, 1), &p));
     const Maybe<point::Point> pt =
@@ -1870,7 +1767,7 @@ TEST(kitty_graphics_storage, storage_scroll_margins_reverse_index_clips_at_botto
     t.setCursorPos(2, 1);
 
     /* Moves down, with the bottom cell row clipped off the source. */
-    kittyReverseIndex(storage, t);
+    t.reverseIndex();
     {
         Placement p;
         ASSERT_TRUE(storage.placements.get(extKey(1, 1), &p));
@@ -1883,7 +1780,7 @@ TEST(kitty_graphics_storage, storage_scroll_margins_reverse_index_clips_at_botto
     }
 
     /* Fully clipped: deleted. */
-    kittyReverseIndex(storage, t);
+    t.reverseIndex();
     ASSERT_EQ(0, storage.placements.count());
 }
 
@@ -1905,7 +1802,7 @@ TEST(kitty_graphics_storage, storage_scroll_margins_scaled_placement_clips_propo
     t.setTopAndBottomMargin(2, 3);
     t.setCursorPos(3, 1);
 
-    ASSERT_TRUE(kittyIndex(storage, t));
+    ASSERT_TRUE(t.index());
     Placement p;
     ASSERT_TRUE(storage.placements.get(extKey(1, 1), &p));
     const Maybe<point::Point> pt =
@@ -1935,7 +1832,7 @@ TEST(kitty_graphics_storage, storage_scroll_margins_left_right_margins_respect_c
     t.modes.set(terminal::modes::Mode::enable_left_and_right_margin, true);
     t.setLeftAndRightMargin(2, 8);
 
-    ASSERT_TRUE(kittyScrollUp(storage, t, 1));
+    ASSERT_TRUE(t.scrollUp(1));
 
     /* Outside the margin columns: stays. */
     {
@@ -2007,7 +1904,7 @@ TEST(kitty_graphics_storage, storage_scroll_without_margins_moves_placement_into
                                      pinAt(trackPin(&t, xy(0, 0)))));
     t.setCursorPos(6, 1);
 
-    ASSERT_TRUE(kittyIndex(storage, t));
+    ASSERT_TRUE(t.index());
     Placement p;
     ASSERT_TRUE(storage.placements.get(extKey(1, 1), &p));
     ASSERT_TRUE(!t.screens.active->pages
@@ -2031,7 +1928,7 @@ TEST(kitty_graphics_storage, storage_scroll_margins_large_scroll_deletes_inside_
                                      pinAt(trackPin(&t, xy(0, 2)))));
     t.setTopAndBottomMargin(2, 5);
 
-    ASSERT_TRUE(kittyScrollUp(storage, t, 10));
+    ASSERT_TRUE(t.scrollUp(10));
     ASSERT_EQ(0, storage.placements.count());
 }
 
@@ -2051,7 +1948,7 @@ TEST(kitty_graphics_storage, storage_scroll_margins_straddling_placement_pin_ins
     t.setTopAndBottomMargin(2, 5);
     t.setCursorPos(5, 1);
 
-    ASSERT_TRUE(kittyIndex(storage, t));
+    ASSERT_TRUE(t.index());
     Placement p;
     ASSERT_TRUE(storage.placements.get(extKey(1, 1), &p));
     const Maybe<point::Point> pt =
@@ -2077,7 +1974,7 @@ TEST(kitty_graphics_storage, storage_scroll_margins_multi_line_scroll_up_with_sc
                                      pinAt(trackPin(&t, xy(0, 2)))));
     t.setTopAndBottomMargin(1, 4);
 
-    ASSERT_TRUE(kittyScrollUp(storage, t, 2));
+    ASSERT_TRUE(t.scrollUp(2));
     {
         Placement p;
         ASSERT_TRUE(storage.placements.get(extKey(1, 1), &p));
@@ -2088,7 +1985,7 @@ TEST(kitty_graphics_storage, storage_scroll_margins_multi_line_scroll_up_with_sc
     }
 
     /* Another two rows scrolls it out of the region: deleted. */
-    ASSERT_TRUE(kittyScrollUp(storage, t, 2));
+    ASSERT_TRUE(t.scrollUp(2));
     ASSERT_EQ(0, storage.placements.count());
 }
 

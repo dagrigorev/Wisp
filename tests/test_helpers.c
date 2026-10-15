@@ -1,6 +1,9 @@
 #include "test_helpers.h"
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(_MSC_VER)
+#include <crtdbg.h>
+#endif
 
 TestCase g_tests[MAX_TESTS];
 int      g_test_count = 0;
@@ -37,4 +40,20 @@ int run_all_tests(void) {
     return g_fail_count > 0 ? 1 : 0;
 }
 
-int main(void) { return run_all_tests(); }
+int main(void) {
+    /* A failing assert must kill the process, not open a window.
+     *
+     * MSVC's debug CRT answers abort() and a failed assert with a modal
+     * dialog that waits for a click. Under ctest nothing clicks it, so the
+     * run never finishes and the whole suite looks hung rather than failed
+     * -- which is exactly what happened when a restored assert started
+     * firing. Send both to stderr and let the process die. */
+#if defined(_MSC_VER)
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+#endif
+    return run_all_tests();
+}

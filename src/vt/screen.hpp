@@ -5,10 +5,16 @@
  * TRANSLITERATION. Comments are upstream's unless marked "Wisp:".
  *
  * Wisp notes:
- *   - Kitty graphics image storage is not ported yet; this corresponds to
- *     upstream's `build_options.kitty_graphics == false` configuration for
- *     Screen (kitty_images is `struct {}`). The kitty placeholder handling
- *     in page/pagelist code is still enabled.
+ *   - Kitty graphics image storage is ported, so `kitty_images` is
+ *     `kitty::graphics_storage::ImageStorage`, i.e. upstream's
+ *     `build_options.kitty_graphics == true` configuration.
+ *     graphics_storage.hpp includes neither screen.hpp nor terminal.hpp
+ *     (it only forward-declares `Screen` and `Terminal`), so including it
+ *     here does not cycle. The bodies of its `Screen`-taking methods are
+ *     in graphics_storage_screen_impl.hpp, which this file includes at its
+ *     end, next to screen_impl.hpp; its `Terminal`-taking methods are
+ *     completed by terminal.hpp. See the note at the top of
+ *     graphics_storage.hpp.
  *   - `std.Io` is not carried over.
  *   - Allocator.Error!T is bool (false = OutOfMemory); IncreaseCapacityError
  *     is PageList::IncreaseCapacityError.
@@ -28,6 +34,7 @@
 
 #include "../terminal/ansi.hpp"
 #include "../terminal/charsets.hpp"
+#include "../terminal/kitty/graphics_storage.hpp"
 #include "../terminal/kitty/key.hpp"
 #include "../terminal/osc.hpp"
 #include "../terminal/sgr.hpp"
@@ -258,9 +265,24 @@ struct Screen {
          * standard page and only complete historical pages are pruned. */
         Maybe<size_t> max_scrollback_lines; /* = null */
 
+        /* The total storage limit for Kitty images in bytes for this
+         * screen. Kitty image storage is per-screen.
+         *
+         * Wisp: upstream's default is `switch (build_options.artifact)`;
+         * Wisp is the `.ghostty` artifact, so the `.lib` arm is omitted. */
+        size_t kitty_image_storage_limit; /* = 320 * 1000 * 1000 (320MB) */
+
+        /* The limits for what medium types are allowed for Kitty image
+         * loading. */
+        terminal::kitty::graphics_image::LoadingImage::Limits
+            kitty_image_loading_limits; /* = .direct */
+
         Options(size::CellCountInt c = 80, size::CellCountInt r = 24, Maybe<size_t> msb = (size_t)0,
                 Maybe<size_t> msl = Maybe<size_t>())
-            : cols(c), rows(r), max_scrollback_bytes(msb), max_scrollback_lines(msl) {}
+            : cols(c), rows(r), max_scrollback_bytes(msb), max_scrollback_lines(msl),
+              kitty_image_storage_limit(320 * 1000 * 1000),
+              kitty_image_loading_limits(
+                  terminal::kitty::graphics_image::LoadingImage::Limits::direct()) {}
 
         /* A simple, default terminal. If you rely on specific dimensions or
          * scrollback (or lack of) then do not use this directly. This is just
@@ -308,6 +330,9 @@ struct Screen {
     /* The kitty keyboard settings. */
     terminal::kitty::KeyFlagStack kitty_keyboard;
 
+    /* Kitty graphics protocol state. */
+    terminal::kitty::graphics_storage::ImageStorage kitty_images;
+
     /* Semantic prompt (OSC133) state. */
     SemanticPrompt semantic_prompt;
 
@@ -317,7 +342,7 @@ struct Screen {
     Screen()
         : alloc(zigstd::c_allocator()), pages(), no_scrollback(false), cursor(), saved_cursor(), selection(),
           charset(), protected_mode(terminal::ansi::ProtectedMode::off), kitty_keyboard(),
-          semantic_prompt(SemanticPrompt::disabled()), dirty() {}
+          kitty_images(), semantic_prompt(SemanticPrompt::disabled()), dirty() {}
 
     /* ------------------------------------------------------------------ */
 
@@ -355,10 +380,15 @@ struct Screen {
         result.cursor.page_pin = page_pin;
         result.cursor.page_row = page_rac.row;
         result.cursor.page_cell = page_rac.cell;
+
+        result.kitty_images.setLimit(alloc, &result, opts.kitty_image_storage_limit);
+        result.kitty_images.image_limits = opts.kitty_image_loading_limits;
+
         return true;
     }
 
     void deinit() {
+        kitty_images.deinit(alloc, this);
         cursor.deinit(alloc);
         pages.deinit();
     }
@@ -430,6 +460,16 @@ struct Screen {
         cursor.page_pin = cursor_pin;
         cursor.page_row = cursor_rac.row;
         cursor.page_cell = cursor_rac.cell;
+
+        /* Reset kitty graphics storage */
+        const terminal::kitty::graphics_image::LoadingImage::Limits image_limits =
+            kitty_images.image_limits;
+        const size_t total_limit = kitty_images.total_limit;
+        kitty_images.deinit(alloc, this);
+        kitty_images = terminal::kitty::graphics_storage::ImageStorage();
+        kitty_images.dirty = true;
+        kitty_images.image_limits = image_limits;
+        kitty_images.total_limit = total_limit;
 
         /* Reset our basic state */
         saved_cursor = Maybe<SavedCursor>::none();
@@ -802,6 +842,12 @@ struct Screen {
     /* Scroll the viewport of the terminal grid. */
     void scroll(const Scroll &behavior) {
         IntegrityGuard g = {this};
+
+        /* No matter what, scrolling marks our image state as dirty since
+         * it could move placements. If there are no placements or no images
+         * this is still a very cheap operation. */
+        kitty_images.dirty = true;
+
         pages.scroll(behavior);
     }
 
@@ -812,6 +858,12 @@ struct Screen {
 
         if (!pages.scrollClear()) return false;
         cursorReload();
+
+        /* No matter what, scrolling marks our image state as dirty since
+         * it could move placements. If there are no placements or no images
+         * this is still a very cheap operation. */
+        kitty_images.dirty = true;
+
         return true;
     }
 
@@ -1568,5 +1620,11 @@ struct Screen {
 } /* namespace wisp */
 
 #include "screen_impl.hpp"
+
+/* Wisp: completes the `Screen`-taking methods of
+ * kitty::graphics_storage::ImageStorage, which could only be declared where
+ * `Screen` was still incomplete. The `Terminal`-taking ones are completed at
+ * the end of terminal.hpp. */
+#include "../terminal/kitty/graphics_storage_screen_impl.hpp"
 
 #endif /* WISP_VT_SCREEN_HPP */

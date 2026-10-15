@@ -8,9 +8,10 @@
  * Wisp, differences in shape rather than behavior:
  *   - `vt(comptime action, value)` is `vt(const Action &)`; the handler
  *     switches on the tag where upstream specializes at comptime.
- *   - Ported with kitty_graphics = false, glyph_protocol = false and
- *     tmux_control_mode = false, matching the rest of the port. The APC
- *     and DCS handlers already reflect that.
+ *   - Ported with glyph_protocol = false and tmux_control_mode = false,
+ *     matching the rest of the port. kitty_graphics is enabled: `apcEnd`
+ *     carries upstream's `.kitty` prong. The APC and DCS handlers reflect
+ *     that.
  *   - `*std.Io.Writer` is `std::string *`; write_pty takes a pointer and
  *     a length rather than a sentinel-terminated slice, so the callback
  *     never needs the terminating NUL upstream reserves a byte for.
@@ -44,6 +45,10 @@
 #include "kitty/clipboard_response.hpp"
 #include "kitty/clipboard_write.hpp"
 #include "kitty/dnd_drop.hpp"
+#include "kitty/graphics_command.hpp"
+#include "kitty/graphics_exec.hpp"
+#include "kitty/graphics_image.hpp"
+#include "kitty/graphics_storage.hpp"
 #include "paste.hpp"
 #include "size_report.hpp"
 #include "terminfo.hpp"
@@ -57,6 +62,11 @@ typedef ::wisp::terminal::osc::ZStr ZStr;
 namespace clip = ::wisp::terminal::clipboard;
 namespace kitty_clipboard = ::wisp::terminal::kitty::clipboard;
 namespace kitty_dnd = ::wisp::terminal::kitty::dnd;
+namespace kitty_graphics = ::wisp::terminal::kitty::graphics;
+namespace kitty_graphics_exec = ::wisp::terminal::kitty::graphics_exec;
+namespace kitty_graphics_image = ::wisp::terminal::kitty::graphics_image;
+namespace kitty_graphics_storage = ::wisp::terminal::kitty::graphics_storage;
+namespace sixel = ::wisp::terminal::sixel;
 namespace paste_pkg = ::wisp::terminal::paste;
 
 struct Handler;
@@ -351,6 +361,10 @@ struct Handler {
     bool dcsPut(uint8_t value);
     bool dcsUnhook();
     bool dcsCommand(dcs::Command *cmd);
+
+    /* Wisp: no upstream counterpart. Decodes a buffered Sixel DCS body
+     * and stores the result. See sixelCommand's definition. */
+    void sixelCommand(dcs::Command *cmd);
     void writeTerminfoName();
 
     void bell();
