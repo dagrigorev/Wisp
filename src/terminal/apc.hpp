@@ -6,11 +6,20 @@
  * Comments are upstream's unless marked "Wisp:".
  *
  * Wisp, differences in shape rather than behavior:
- *   - Ported with kitty_graphics = false and glyph_protocol = false, so the
- *     `.kitty` and `.glyph` state prongs and Command members, and the tests
- *     gated on those build options, are not carried over. Identification
- *     still recognizes both so a disabled protocol is ignored rather than
- *     reported as unknown, which is upstream's behavior in this build.
+ *   - Ported with glyph_protocol = false, so the `.glyph` state prong and
+ *     Command member, and the tests gated on that build option, are not
+ *     carried over. Identification still recognizes the glyph identifier so
+ *     a disabled protocol is ignored rather than reported as unknown, which
+ *     is upstream's behavior in this build.
+ *   - kitty_graphics is enabled: the `.kitty` prong is present and holds a
+ *     kitty::graphics::Parser, exactly as upstream's `build_options
+ *     .kitty_graphics` branch does. Upstream's `comptime` gate around it has
+ *     no counterpart because there is no build option to read here; the
+ *     runtime `enabled` check it wraps is kept verbatim.
+ *   - upstream reads the per-protocol byte limit as
+ *     `max_bytes.get(.kitty) orelse Protocol.defaultMaxBytes(.kitty)`
+ *     because std.EnumMap entries are optional. `max_bytes` here is a plain
+ *     array that is always populated, so the `orelse` has no counterpart.
  *   - `?Command` is a bool return plus the Command through an out parameter;
  *     `union(enum)` is a tag enum plus one field per payload.
  *   - std.EnumMap/std.EnumSet over Protocol are plain arrays indexed by
@@ -28,10 +37,14 @@
 
 #include "../zigstd/allocator.hpp"
 #include "../zigstd/array_list.hpp"
+#include "kitty/graphics_command.hpp"
 
 namespace wisp {
 namespace terminal {
 namespace apc {
+
+/* Wisp: upstream's `const kitty_gfx = @import("kitty/graphics.zig");`. */
+namespace kitty_gfx = ::wisp::terminal::kitty::graphics;
 
 namespace glyph {
 /* Wisp: apc/glyph.zig's identifier, which the identify state needs even
@@ -170,16 +183,19 @@ struct UnknownBuilder {
 /* A recognized or unsupported APC command. */
 struct Command {
     enum class Key : uint8_t {
+        kitty,
         unknown,
     };
 
     Key key;
+    kitty_gfx::Command kitty;
     Unknown unknown;
 
-    Command() : key(Key::unknown), unknown() {}
+    Command() : key(Key::unknown), kitty(), unknown() {}
 
     void deinit(zigstd::Allocator alloc) {
         switch (key) {
+        case Key::kitty: kitty.deinit(alloc); break;
         case Key::unknown: unknown.deinit(alloc); break;
         }
     }
@@ -203,7 +219,12 @@ enum class StateKey : uint8_t {
      *    support anything longer than this. */
     identify,
 
-    /* An unsupported APC retained for the optional unknown callback. */
+    /* Kitty graphics protocol */
+    kitty,
+
+    /* An unsupported APC retained for the optional unknown callback.
+     * Keep this after recognized protocol states so their tag values and
+     * generated dispatch stay stable when unknown capture is unused. */
     unknown,
 };
 
@@ -215,9 +236,12 @@ struct State {
         uint8_t buf[glyph::identifier_len];
     } identify;
 
+    /* Kitty graphics protocol */
+    kitty_gfx::Parser kitty;
+
     UnknownBuilder unknown;
 
-    State() : key(StateKey::inactive), unknown() {
+    State() : key(StateKey::inactive), kitty(), unknown() {
         identify.len = 0;
         memset(identify.buf, 0, sizeof identify.buf);
     }
@@ -228,6 +252,7 @@ struct State {
         case StateKey::ignore:
         case StateKey::identify: break;
         case StateKey::unknown: unknown.deinit(); break;
+        case StateKey::kitty: kitty.deinit(); break;
         }
     }
 };
@@ -304,10 +329,19 @@ struct Handler {
 
             /* Kitty graphics is detected immediately on the `G` byte,
              * since commands begin immediately after with no termination
-             * character after the 'G'.
-             * Wisp: build_options.kitty_graphics is false here. */
+             * character after the 'G'. */
             if (id->len == 0 && byte == 'G') {
-                state.key = StateKey::ignore;
+                if (enabled[(size_t)Protocol::kitty]) {
+                    /* Wisp: upstream's `self.max_bytes.get(.kitty) orelse
+                     * Protocol.defaultMaxBytes(.kitty)`; the array is
+                     * always populated, so there is nothing to fall back
+                     * to. */
+                    state.key = StateKey::kitty;
+                    state.kitty =
+                        kitty_gfx::Parser::init(alloc, max_bytes[(size_t)Protocol::kitty]);
+                } else {
+                    state.key = StateKey::ignore;
+                }
                 return;
             }
 
@@ -353,6 +387,15 @@ struct Handler {
             }
             return;
         }
+
+        case StateKey::kitty: {
+            if (state.kitty.feed(byte) != kitty_gfx::Error::none) {
+                /* log.warn("kitty graphics protocol error: {}", .{err}) */
+                state.kitty.deinit();
+                state.key = StateKey::ignore;
+            }
+            return;
+        }
         }
     }
 
@@ -380,6 +423,14 @@ struct Handler {
                 rem += 1;
                 rem_len -= 1;
                 break;
+
+            case StateKey::kitty:
+                if (state.kitty.feedSlice(rem, rem_len) != kitty_gfx::Error::none) {
+                    /* log.warn("kitty graphics protocol error: {}", .{err}) */
+                    state.kitty.deinit();
+                    state.key = StateKey::ignore;
+                }
+                return;
             }
         }
     }
@@ -396,6 +447,22 @@ struct Handler {
             Command cmd;
             cmd.key = Command::Key::unknown;
             cmd.unknown = state.unknown.toOwned();
+            *out = cmd;
+            result = true;
+            break;
+        }
+        case StateKey::kitty: {
+            /* Use the same allocator that was used to create the parser. */
+            const zigstd::Allocator alloc = state.kitty.alloc;
+            kitty_gfx::Command command;
+            if (state.kitty.complete(alloc, &command) != kitty_gfx::Error::none) {
+                /* log.warn("kitty graphics protocol error: {}", .{err}) */
+                break; /* Wisp: upstream's `break :kitty null` */
+            }
+
+            Command cmd;
+            cmd.key = Command::Key::kitty;
+            cmd.kitty = command;
             *out = cmd;
             result = true;
             break;
