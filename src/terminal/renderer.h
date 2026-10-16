@@ -23,6 +23,10 @@ typedef struct {
 
 /* ─── Renderer ───────────────────────────────────────────────────────────── */
 
+/* The per-image ID2D1Bitmap cache. Opaque here; defined in renderer.cpp,
+   which is the only file that uploads or draws images. */
+typedef struct ImageCache ImageCache;
+
 typedef struct {
     /* Direct2D */
     ID2D1Factory          *d2d_factory;
@@ -80,6 +84,11 @@ typedef struct {
 
     /* Tab bar height (0 if tabs disabled) */
     int    tab_bar_height;
+
+    /* One ID2D1Bitmap per terminal image, keyed by image ID. Owned by the
+       renderer: emptied on device loss and on destroy, and entries are
+       dropped as images leave the terminal's storage. */
+    ImageCache *images;
 
     HWND   hwnd;
 } Renderer;

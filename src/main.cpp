@@ -392,6 +392,14 @@ static void pane_apply_rect(Pane *p, RECT rc) {
     int cols = 1, rows = 1;
     renderer_grid_size(&g_renderer, (int)(rc.right - rc.left), (int)(rc.bottom - rc.top),
                        &cols, &rows);
+
+    /* Kitty graphics geometry is in pixels, so the terminal needs the cell
+       size. This comes before the unchanged-grid early return on purpose:
+       a font or DPI change moves the cell size without moving the grid. */
+    EnterCriticalSection(&g_lock);
+    p->term.setCellSizePx((unsigned)g_renderer.cell_w, (unsigned)g_renderer.cell_h);
+    LeaveCriticalSection(&g_lock);
+
     if (cols == p->term.view.cols && rows == p->term.view.rows) return;
 
     EnterCriticalSection(&g_lock);
