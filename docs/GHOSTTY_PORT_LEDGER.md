@@ -13,9 +13,9 @@ License: MIT, (c) 2024 Mitchell Hashimoto and Ghostty contributors
 | | Files | Lines |
 |---|---:|---:|
 | Upstream `src/` (Zig) | 589 | 342401 |
-| Ported | - | 106012 |
-| Not applicable to this port | - | 60628 |
-| Remaining | - | 175761 |
+| Ported | - | 120322 |
+| Not applicable to this port | - | 44430 |
+| Remaining | - | 177649 |
 | ...of which partially ported | - | 0 |
 
 Status values: `todo`, `wip`, `done`, `n/a`. A `wip` file counts
@@ -25,9 +25,15 @@ whole file's length.
 
 `n/a` covers two cases: a module that does not apply to a Windows
 port at all (a GTK runtime, a Metal backend), and a module behind a
-build flag this port disables — `kitty_graphics`, `glyph_protocol`
-and `tmux_control_mode`. Neither will be ported, so neither counts
+build flag this port disables — `glyph_protocol` and
+`tmux_control_mode`. Neither will be ported, so neither counts
 toward *remaining*.
+
+`kitty_graphics` was in that list until 2026-10-16, when the whole
+subsystem was ported and the flag enabled. Anything still marked
+`n/a` for that reason is a stale cell, not a decision. Statuses are
+carried forward across regenerations, so a wrong one persists until
+somebody checks it against the tree.
 
 ## Modules
 
@@ -207,7 +213,7 @@ _Not applicable: Linux GTK application runtime._
 |---|---:|---|
 | `terminal/c/terminal.zig` | 6266 | todo |
 | `terminal/c/render.zig` | 2570 | todo |
-| `terminal/c/kitty_graphics.zig` | 2138 | n/a |
+| `terminal/c/kitty_graphics.zig` | 2138 | todo |
 | `terminal/c/snapshot.zig` | 1527 | todo |
 | `terminal/c/selection_gesture.zig` | 1490 | todo |
 | `terminal/c/types.zig` | 1174 | todo |
@@ -243,28 +249,28 @@ _Not applicable: Linux GTK application runtime._
 
 | File | Lines | Status |
 |---|---:|---|
-| `terminal/kitty/graphics_storage.zig` | 4664 | n/a |
-| `terminal/kitty/graphics_exec.zig` | 3603 | n/a |
-| `terminal/kitty/graphics_image.zig` | 2161 | n/a |
-| `terminal/kitty/graphics_command.zig` | 1872 | n/a |
-| `terminal/kitty/graphics_unicode.zig` | 1349 | n/a |
+| `terminal/kitty/graphics_storage.zig` | 4664 | done |
+| `terminal/kitty/graphics_exec.zig` | 3603 | done |
+| `terminal/kitty/graphics_image.zig` | 2161 | done |
+| `terminal/kitty/graphics_command.zig` | 1872 | done |
+| `terminal/kitty/graphics_unicode.zig` | 1349 | done |
 | `terminal/kitty/dnd_drop.zig` | 715 | done |
 | `terminal/kitty/clipboard_write.zig` | 698 | done |
 | `terminal/kitty/dnd_test.zig` | 626 | done |
 | `terminal/kitty/clipboard_command.zig` | 502 | done |
 | `terminal/kitty/clipboard_response.zig` | 469 | done |
 | `terminal/kitty/dnd_command.zig` | 436 | done |
-| `terminal/kitty/windows.zig` | 277 | todo |
+| `terminal/kitty/windows.zig` | 277 | done |
 | `terminal/kitty/dnd_response.zig` | 248 | done |
 | `terminal/kitty/clipboard_grants.zig` | 238 | done |
-| `terminal/kitty/graphics_pixel.zig` | 235 | n/a |
+| `terminal/kitty/graphics_pixel.zig` | 235 | done |
 | `terminal/kitty/key.zig` | 169 | done |
-| `terminal/kitty/graphics_animation.zig` | 149 | n/a |
+| `terminal/kitty/graphics_animation.zig` | 149 | done |
 | `terminal/kitty/color.zig` | 98 | done |
 | `terminal/kitty/clipboard.zig` | 82 | done |
 | `terminal/kitty/dnd.zig` | 69 | done |
 | `terminal/kitty/graphics.zig` | 36 | n/a |
-| `terminal/kitty/graphics_render.zig` | 27 | n/a |
+| `terminal/kitty/graphics_render.zig` | 27 | todo |
 
 ### `config`
 
