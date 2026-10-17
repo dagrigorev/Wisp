@@ -99,13 +99,45 @@ typedef struct {
     char    section[64];
 } ParseCtx;
 
+/* Diagnostics for the most recent parse. Reset by config_parse_file(). */
+static int  g_parse_error_count = 0;
+static char g_parse_error_first[512] = {0};
+
+static void record_parse_error(const char *path, int line_no,
+                               const char *key, const char *why) {
+    char msg[512];
+    _snprintf(msg, sizeof(msg), "%s:%d: %s in value for key '%s'",
+              path ? path : "(config)", line_no, why, key);
+    msg[sizeof(msg)-1] = '\0';
+
+    g_parse_error_count++;
+    if (g_parse_error_count == 1) {
+        strncpy(g_parse_error_first, msg, sizeof(g_parse_error_first)-1);
+        g_parse_error_first[sizeof(g_parse_error_first)-1] = '\0';
+    }
+    WISP_LOG_ERROR("config: %s", msg);
+}
+
+int config_parse_error_count(void) { return g_parse_error_count; }
+
+const char *config_parse_error_first(void) { return g_parse_error_first; }
+
 static void trim_inline(char *s) {
-    /* Remove trailing comment and whitespace */
+    /* Remove trailing comment and whitespace. A '#' inside a quoted value is
+     * data, not a comment, and inside a basic string a backslash escapes the
+     * character after it — so "a\"# b" is one string, not a comment. */
     char *p = s;
-    bool in_str = false;
+    char quote = 0;
     while (*p) {
-        if (*p == '"') in_str = !in_str;
-        if (!in_str && *p == '#') { *p = '\0'; break; }
+        if (quote == '"' && *p == '\\' && p[1]) { p += 2; continue; }
+        if (quote) {
+            if (*p == quote) quote = 0;
+        } else if (*p == '"' || *p == '\'') {
+            quote = *p;
+        } else if (*p == '#') {
+            *p = '\0';
+            break;
+        }
         p++;
     }
     /* Right-trim */
@@ -114,46 +146,108 @@ static void trim_inline(char *s) {
     *p = '\0';
 }
 
-static char *unquote(char *s) {
+/* Read exactly n hex digits. Fails on a short run or a non-hex byte, so a
+ * truncated escape at end of string is rejected rather than read past. */
+static bool parse_hex(const char *src, int n, uint32_t *out) {
+    uint32_t v = 0;
+    for (int i = 0; i < n; i++) {
+        int d;
+        char c = src[i];
+        if      (c >= '0' && c <= '9') d = c - '0';
+        else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
+        else return false;
+        v = v * 16 + (uint32_t)d;
+    }
+    *out = v;
+    return true;
+}
+
+/* Interpret the escapes TOML defines for a basic string, in place.
+ *
+ * Any other escape is a parse error. Dropping the backslash instead — as this
+ * used to — turns shell = "C:\Users\me\sh.exe" into C:Usersmesh.exe, and the
+ * only symptom is a spawn failure naming a path nobody wrote. */
+static bool unescape_basic(char *s, char *why, size_t why_size) {
+    char *src = s;
+    char *dst = s;
+    while (*src) {
+        if (*src != '\\') { *dst++ = *src++; continue; }
+        src++;
+        switch (*src) {
+            case 'b':  *dst++ = '\b'; src++; break;
+            case 't':  *dst++ = '\t'; src++; break;
+            case 'n':  *dst++ = '\n'; src++; break;
+            case 'f':  *dst++ = '\f'; src++; break;
+            case 'r':  *dst++ = '\r'; src++; break;
+            case '"':  *dst++ = '"';  src++; break;
+            case '\\': *dst++ = '\\'; src++; break;
+            case 'u':
+            case 'U': {
+                char     kind = *src;
+                int      n    = (kind == 'u') ? 4 : 8;
+                uint32_t cp;
+                if (!parse_hex(src + 1, n, &cp)) {
+                    _snprintf(why, why_size,
+                              "escape \\%c needs %d hex digits", kind, n);
+                    why[why_size-1] = '\0';
+                    return false;
+                }
+                if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+                    _snprintf(why, why_size,
+                              "escape \\%c is not a Unicode scalar value (U+%04X)",
+                              kind, (unsigned)cp);
+                    why[why_size-1] = '\0';
+                    return false;
+                }
+                /* Safe in place: the UTF-8 encoding is never longer than the
+                 * escape it replaces (\uXXXX is 6 source bytes for at most 3
+                 * output, \UXXXXXXXX is 10 for at most 4). */
+                dst += utf8_encode((unsigned int)cp, dst);
+                src += 1 + n;
+                break;
+            }
+            case '\0':
+                _snprintf(why, why_size, "trailing backslash escapes nothing");
+                why[why_size-1] = '\0';
+                return false;
+            default:
+                _snprintf(why, why_size, "unknown escape \\%c", *src);
+                why[why_size-1] = '\0';
+                return false;
+        }
+    }
+    *dst = '\0';
+    return true;
+}
+
+/* Unwrap a TOML value in place.
+ *
+ * Basic (double-quoted) strings have their escapes interpreted. Literal
+ * (single-quoted) strings are passed through verbatim, which is the form a
+ * Windows path should normally take: shell = 'C:\Users\me\sh.exe'. Anything
+ * else — numbers, booleans — is returned untouched.
+ *
+ * Returns NULL on a parse error, with the reason in why. */
+static char *unquote(char *s, char *why, size_t why_size) {
     if (!s) return s;
     size_t l = strlen(s);
     if (l >= 2 && s[0] == '"' && s[l-1] == '"') {
         s[l-1] = '\0';
         s++;
-
-        /* Minimal TOML string unescaping.
-         * Important for Windows paths: default_cwd = "C:\\work"
-         * must become C:\work, not C:\\work. */
-        char *src = s;
-        char *dst = s;
-        while (*src) {
-            if (*src == '\\' && src[1]) {
-                src++;
-                switch (*src) {
-                    case 'n':  *dst++ = '\n'; break;
-                    case 'r':  *dst++ = '\r'; break;
-                    case 't':  *dst++ = '\t'; break;
-                    case '"': *dst++ = '"'; break;
-                    case '\\': *dst++ = '\\'; break;
-                    default:
-                        *dst++ = *src;
-                        break;
-                }
-                src++;
-            } else {
-                *dst++ = *src++;
-            }
-        }
-        *dst = '\0';
+        if (!unescape_basic(s, why, why_size)) return NULL;
         return s;
+    }
+    if (l >= 2 && s[0] == '\'' && s[l-1] == '\'') {
+        s[l-1] = '\0';
+        return s + 1;
     }
     return s;
 }
 
-static void apply_kv(ParseCtx *ctx, const char *key, char *val) {
+static void apply_kv(ParseCtx *ctx, const char *key, const char *v) {
     Config *c = ctx->cfg;
     const char *sec = ctx->section;
-    char *v = unquote(val);
 
     if (strcmp(sec, "general") == 0) {
         if (!strcmp(key, "shell"))         strncpy(c->general.shell,       v, sizeof(c->general.shell)-1);
@@ -221,8 +315,13 @@ static bool config_parse_file(Config *cfg, const char *toml_path) {
 
     ParseCtx ctx = { .cfg = cfg, .section = "" };
     char line[1024];
+    int  line_no = 0;
+
+    g_parse_error_count = 0;
+    g_parse_error_first[0] = '\0';
 
     while (fgets(line, sizeof(line), f)) {
+        line_no++;
         /* Strip line ending */
         char *p = line + strlen(line);
         while (p > line && (p[-1] == '\r' || p[-1] == '\n')) p--;
@@ -256,7 +355,16 @@ static bool config_parse_file(Config *cfg, const char *toml_path) {
         while (*val == ' ' || *val == '\t') val++;
         trim_inline(val);
 
-        apply_kv(&ctx, key, val);
+        /* A value that does not parse is reported and skipped: the key keeps
+         * whatever it had, rather than silently taking a mangled value. */
+        char why[128];
+        char *v = unquote(val, why, sizeof(why));
+        if (!v) {
+            record_parse_error(toml_path, line_no, key, why);
+            continue;
+        }
+
+        apply_kv(&ctx, key, v);
     }
     fclose(f);
     return true;

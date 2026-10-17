@@ -106,6 +106,14 @@ void config_path(char *out, int out_size);
 /* Parse "#RRGGBB" hex color string; returns 0 on failure */
 uint32_t config_parse_color(const char *hex);
 
+/* Diagnostics for the most recent config_load() / config_apply_theme_file().
+ * A key whose value fails to parse is counted here, logged at ERROR, and left
+ * at its previous value instead of being applied half-unescaped. The load's
+ * own return value only reports whether the file could be read.
+ * config_parse_error_first() returns "" when there were no errors. */
+int         config_parse_error_count(void);
+const char *config_parse_error_first(void);
+
 
 #ifdef __cplusplus
 }
