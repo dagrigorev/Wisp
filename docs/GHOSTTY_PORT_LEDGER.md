@@ -270,7 +270,7 @@ _Not applicable: Linux GTK application runtime._
 | `terminal/kitty/clipboard.zig` | 82 | done |
 | `terminal/kitty/dnd.zig` | 69 | done |
 | `terminal/kitty/graphics.zig` | 36 | n/a |
-| `terminal/kitty/graphics_render.zig` | 27 | todo |
+| `terminal/kitty/graphics_render.zig` | 27 | done |
 
 ### `config`
 
