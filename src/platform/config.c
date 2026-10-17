@@ -221,6 +221,106 @@ static bool unescape_basic(char *s, char *why, size_t why_size) {
     return true;
 }
 
+/* ─── Multi-line strings ─────────────────────────────────────────────────── */
+
+/* A multi-line value is accumulated into a buffer of this size, NUL included.
+ * Every destination field is smaller (shell[256], default_cwd[MAX_PATH],
+ * title[256]) and apply_kv() truncates into it as it always has; this bound is
+ * what keeps the accumulation itself inside its buffer. A longer value is a
+ * reported parse error rather than a value quietly cut in half. */
+#define MULTILINE_MAX 1024
+
+/* Apply the line-ending backslash of a multi-line basic string, in place: an
+ * unescaped backslash that ends a line removes the newline and all whitespace
+ * that follows it. Runs before unescape_basic(), which has no case for a
+ * backslash before a newline and would report it as an unknown escape. */
+static void apply_line_ending_backslash(char *s) {
+    char *src = s;
+    char *dst = s;
+    while (*src) {
+        if (*src == '\\') {
+            /* An escaped backslash is data: leave both bytes to
+             * unescape_basic() so \\ at the end of a line is not taken for a
+             * line-ending backslash. */
+            if (src[1] == '\\') { *dst++ = *src++; *dst++ = *src++; continue; }
+            const char *look = src + 1;
+            while (*look == ' ' || *look == '\t' || *look == '\r') look++;
+            if (*look == '\n') {
+                src = (char *)look + 1;
+                while (*src == ' ' || *src == '\t' || *src == '\r' || *src == '\n') src++;
+                continue;
+            }
+        }
+        *dst++ = *src++;
+    }
+    *dst = '\0';
+}
+
+/* Consume the body of a multi-line string whose opening delimiter was found on
+ * the line just read.
+ *
+ * rest points just past that delimiter and delim is """ or '''. Further lines
+ * are read from f until the closing delimiter, which TOML lets sit on a line of
+ * its own; anything after it on that line is whitespace or a comment and is
+ * ignored. The escapes of a basic string are left to the caller, so this reads
+ * either flavour the same way.
+ *
+ * Returns false on overflow or end of file, with the reason in why; in both
+ * cases the key is the caller's to skip. */
+static bool read_multiline(FILE *f, const char *delim, const char *rest,
+                           char *out, size_t out_size, int *line_no,
+                           char *why, size_t why_size) {
+    size_t len      = 0;
+    bool   overflow = false;
+    bool   first    = true;
+    char   line[1024];
+
+    for (;;) {
+        const char *close = strstr(rest, delim);
+        size_t      take  = close ? (size_t)(close - rest) : strlen(rest);
+
+        /* A newline immediately after the opening delimiter is trimmed. Any
+         * other text on that first line, whitespace included, is content. */
+        bool trim_opening_newline = first && !close && take == 0;
+
+        if (take > 0) {
+            if (len + take + 1 > out_size) overflow = true;
+            else { memcpy(out + len, rest, take); len += take; }
+        }
+
+        if (close) {
+            if (overflow) {
+                _snprintf(why, why_size,
+                          "multi-line string longer than %d bytes",
+                          (int)out_size - 1);
+                why[why_size-1] = '\0';
+                return false;
+            }
+            out[len] = '\0';
+            return true;
+        }
+
+        /* The newline between two body lines is part of the value. */
+        if (!trim_opening_newline) {
+            if (len + 2 > out_size) overflow = true;
+            else out[len++] = '\n';
+        }
+        first = false;
+
+        if (!fgets(line, sizeof(line), f)) {
+            _snprintf(why, why_size, "unterminated multi-line string");
+            why[why_size-1] = '\0';
+            return false;
+        }
+        (*line_no)++;
+        /* fgets keeps the line ending; the body supplies its own newlines. */
+        char *p = line + strlen(line);
+        while (p > line && (p[-1] == '\r' || p[-1] == '\n')) p--;
+        *p = '\0';
+        rest = line;
+    }
+}
+
 /* Unwrap a TOML value in place.
  *
  * Basic (double-quoted) strings have their escapes interpreted. Literal
@@ -353,15 +453,44 @@ static bool config_parse_file(Config *cfg, const char *toml_path) {
         p = key + strlen(key);
         while (p > key && (p[-1] == ' ' || p[-1] == '\t')) { p--; *p = '\0'; }
         while (*val == ' ' || *val == '\t') val++;
-        trim_inline(val);
 
         /* A value that does not parse is reported and skipped: the key keeps
          * whatever it had, rather than silently taking a mangled value. */
         char why[128];
-        char *v = unquote(val, why, sizeof(why));
-        if (!v) {
-            record_parse_error(toml_path, line_no, key, why);
-            continue;
+        char *v;
+
+        /* A value opened with """ or ''' runs on over the following lines, so
+         * it is read whole before it is unescaped — and never passed through
+         * trim_inline(), since a '#' anywhere in the body is data. */
+        const char *delim = NULL;
+        if      (!strncmp(val, "\"\"\"", 3)) delim = "\"\"\"";
+        else if (!strncmp(val, "'''",    3)) delim = "'''";
+
+        char body[MULTILINE_MAX];
+        if (delim) {
+            if (!read_multiline(f, delim, val + 3, body, sizeof(body),
+                                &line_no, why, sizeof(why))) {
+                record_parse_error(toml_path, line_no, key, why);
+                continue;
+            }
+            /* A multi-line basic string takes the same escapes as a
+             * single-line one, plus the line-ending backslash. A multi-line
+             * literal string is verbatim. */
+            if (*delim == '"') {
+                apply_line_ending_backslash(body);
+                if (!unescape_basic(body, why, sizeof(why))) {
+                    record_parse_error(toml_path, line_no, key, why);
+                    continue;
+                }
+            }
+            v = body;
+        } else {
+            trim_inline(val);
+            v = unquote(val, why, sizeof(why));
+            if (!v) {
+                record_parse_error(toml_path, line_no, key, why);
+                continue;
+            }
         }
 
         apply_kv(&ctx, key, v);
