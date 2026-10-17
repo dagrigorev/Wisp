@@ -49,9 +49,12 @@
  *     adapting.
  *
  *   - `RenderPlacement` is `terminal.kitty.graphics.RenderPlacement`, i.e.
- *     the `Placement` struct of graphics_render.zig (27 lines). If the
- *     sibling port `graphics_render.hpp` exists it is used; otherwise that
- *     whole file is transliterated inline below, marked as such.
+ *     the `Placement` struct of graphics_render.zig (27 lines), which
+ *     graphics_render.hpp supplies as `graphics::render::Placement`.
+ *     Until that sibling existed this file transliterated the struct
+ *     inline, behind a `__has_include` check that preferred the sibling
+ *     if it ever appeared. It has appeared, so the copy and the check are
+ *     gone.
  */
 
 #pragma once
@@ -68,57 +71,18 @@
 #include "../../vt/size.hpp"
 #include "../../vt/style.hpp"
 
-/* Wisp: see the header note. graphics_render.zig is tiny, so it is either
- * taken from the sibling port or transliterated inline. */
-#if defined(__has_include)
-#if __has_include("graphics_render.hpp")
+/* Wisp: graphics_render.hpp supplies graphics::render::Placement, which
+ * RenderPlacement below is an alias for. This was once a
+ * __has_include check with the struct transliterated inline as a
+ * fallback, because this file was ported before that one existed. The
+ * sibling exists now, so the include is plain. */
 #include "graphics_render.hpp"
-#define WISP_KITTY_GRAPHICS_UNICODE_HAVE_RENDER 1
-#endif
-#endif
 
 namespace wisp {
 namespace terminal {
 namespace kitty {
 namespace graphics {
 
-#ifndef WISP_KITTY_GRAPHICS_UNICODE_HAVE_RENDER
-namespace render {
-
-/* Wisp: transliterated in full from Ghostty
- * src/terminal/kitty/graphics_render.zig. Used here only as the result
- * type of Placement.renderPlacement. */
-
-/// A render placement is a way to position a Kitty graphics image onto
-/// the screen. It is broken down into the fields that make it easier to
-/// position the image using a renderer.
-struct Placement {
-    /// The top-left corner of the image in grid coordinates.
-    ::wisp::vt::PageList::Pin top_left;
-
-    /// The offset in pixels from the top-left corner of the grid cell.
-    uint32_t offset_x; /* = 0 */
-    uint32_t offset_y; /* = 0 */
-
-    /// The source rectangle of the image to render. This doesn't have to
-    /// match the size the destination size and the renderer is expected
-    /// to scale the image to fit the destination size.
-    uint32_t source_x;      /* = 0 */
-    uint32_t source_y;      /* = 0 */
-    uint32_t source_width;  /* = 0 */
-    uint32_t source_height; /* = 0 */
-
-    /// The final width/height of the image in pixels.
-    uint32_t dest_width;  /* = 0 */
-    uint32_t dest_height; /* = 0 */
-
-    Placement()
-        : top_left(), offset_x(0), offset_y(0), source_x(0), source_y(0),
-          source_width(0), source_height(0), dest_width(0), dest_height(0) {}
-};
-
-} /* namespace render */
-#endif
 
 namespace graphics_unicode {
 

@@ -8,10 +8,22 @@
  * How a Kitty graphics image is positioned on screen, broken into the
  * fields a renderer needs rather than the ones the protocol carries.
  *
+ * Wisp: this file fills a seam graphics_unicode.hpp left for it. That file
+ * needs `graphics.RenderPlacement` as a return type, and when it was
+ * ported this file did not exist, so it transliterated the struct inline
+ * behind a `__has_include("graphics_render.hpp")` check: use the sibling
+ * if it ever appears, otherwise carry a copy. This is that sibling, so
+ * the copy and the check are gone and the include is unconditional.
+ *
+ * That seam dictates the namespace. `Placement` must be reachable as
+ * `render::Placement` from inside `namespace graphics`, which is also
+ * upstream's own path for it -- graphics.zig does
+ * `const render = @import("graphics_render.zig");
+ * pub const RenderPlacement = render.Placement;`. An earlier version of
+ * this file put it in `kitty::graphics_render` instead, which matched
+ * neither, and broke the build.
+ *
  * Wisp, differences in shape rather than behavior:
- *   - This file is ported in full. `kitty_graphics` was false when the
- *     surrounding subsystem was ported and this file was omitted; it is
- *     in scope now.
  *   - Upstream reaches Pin through `terminal = @import("../main.zig")`,
  *     which re-exports it. The port has no such aggregator header, so
  *     PageList is included directly.
@@ -40,7 +52,8 @@
 namespace wisp {
 namespace terminal {
 namespace kitty {
-namespace graphics_render {
+namespace graphics {
+namespace render {
 
 typedef ::wisp::vt::PageList PageList;
 
@@ -68,7 +81,8 @@ struct Placement {
     uint32_t dest_height = 0;
 };
 
-} /* namespace graphics_render */
+} /* namespace render */
+} /* namespace graphics */
 } /* namespace kitty */
 } /* namespace terminal */
 } /* namespace wisp */
