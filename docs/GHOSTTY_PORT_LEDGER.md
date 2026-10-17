@@ -113,7 +113,7 @@ somebody checks it against the tree.
 | `terminal/dcs.zig` | 571 | done |
 | `terminal/modes.zig` | 497 | done |
 | `terminal/parse_table.zig` | 448 | done |
-| `terminal/build_options.zig` | 333 | todo |
+| `terminal/build_options.zig` | 333 | wip |
 | `terminal/Tabstops.zig` | 297 | done |
 | `terminal/StringMap.zig` | 296 | done |
 | `terminal/mem.zig` | 260 | done |
