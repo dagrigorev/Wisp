@@ -58,7 +58,6 @@ upstream names. Include guards are `WISP_<DIR>_<FILE>_HPP`.
 These upstream features are disabled in Wisp:
 
 ```
-kitty_graphics      = false
 glyph_protocol      = false
 tmux_control_mode   = false
 ```
@@ -66,6 +65,17 @@ tmux_control_mode   = false
 Code and tests behind them are omitted, each with a `Wisp:` note saying which flag
 gated it. Do not port them "for completeness" — they pull in dependencies the port does
 not have.
+
+`kitty_graphics` was disabled until 2026-10-16. The subsystem is now ported and the
+flag is on, so a `Wisp:` note citing it is stale and the gated code it describes should
+be restored rather than left out. Sixel is original work, not a port: upstream has no
+Sixel implementation, so `src/terminal/sixel.hpp` is written to DEC STD 070 and says so.
+
+One consequence worth stating, because it has already caused rework: when a gated
+upstream file is finally ported, check whether anything in the port paraphrased it in
+the meantime. `terminal/kitty/graphics_render.zig` defines a `Placement` struct that
+the Direct2D renderer re-derived by hand as `ScreenImagePlacement` while the flag was
+off. A paraphrase of an upstream type is a transliteration debt, not a design choice.
 
 Tests are compiled with `WISP_IS_TEST=1` and `WISP_SLOW_RUNTIME_SAFETY=1`.
 
