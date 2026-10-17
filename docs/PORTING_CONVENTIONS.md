@@ -72,10 +72,25 @@ be restored rather than left out. Sixel is original work, not a port: upstream h
 Sixel implementation, so `src/terminal/sixel.hpp` is written to DEC STD 070 and says so.
 
 One consequence worth stating, because it has already caused rework: when a gated
-upstream file is finally ported, check whether anything in the port paraphrased it in
-the meantime. `terminal/kitty/graphics_render.zig` defines a `Placement` struct that
-the Direct2D renderer re-derived by hand as `ScreenImagePlacement` while the flag was
-off. A paraphrase of an upstream type is a transliteration debt, not a design choice.
+upstream file is finally ported, **search the tree for it before porting it.** A file
+omitted for a flag may already be in the port, transliterated inside whichever file
+needed it first.
+
+`terminal/kitty/graphics_render.zig` is the worked example, and it cost a broken build.
+Its 27-line `Placement` struct was already transliterated inside
+`graphics_unicode.hpp`, which needed it as a return type, behind a
+`__has_include("graphics_render.hpp")` check that would prefer a sibling port if one
+ever appeared. The ledger said `n/a`, nobody looked, and it was "ported" a second time
+as a new file — in a different namespace to the one the check expected, which flipped
+the guard, dropped the inline copy and broke the build in a translation unit that an
+incremental build did not recompile. The lesson is in two parts: grep first, and when a
+file provides a type another file already declares a fallback for, match the namespace
+the fallback expects.
+
+Separately, when the real file does arrive, check whether anything paraphrased it in the
+meantime. The Direct2D renderer re-derived that same struct by hand as
+`ScreenImagePlacement` while the flag was off. A paraphrase of an upstream type is a
+transliteration debt, not a design choice.
 
 Tests are compiled with `WISP_IS_TEST=1` and `WISP_SLOW_RUNTIME_SAFETY=1`.
 
@@ -150,6 +165,24 @@ When passing a build type to CMake from PowerShell, **quote the whole argument**
 `"-DCMAKE_BUILD_TYPE=$Configuration"`. A bare dash-leading argument is passed to a
 native command literally, variable unexpanded — which is how both CI matrix legs once
 compiled identically and how released binaries shipped unoptimized.
+
+### An incremental build is not evidence
+
+Before claiming a change is clean, build it into a **fresh tree**:
+
+```
+cmake -S . -B build-fresh -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-fresh --target all
+ctest --test-dir build-fresh -C Debug
+```
+
+This is header-only in large part, so a change to one header is only seen by the
+translation units that happen to get recompiled. A green incremental build over a warm
+`build-ci` says nothing about the ones that did not. Twice in one day it said the wrong
+thing: it hid the `C4702` in `zigstd/allocator.hpp`, which was reported and dismissed as
+unreproducible, and it hid a hard compile error in `kitty/graphics_unicode.hpp` that
+failed CI on both matrix legs minutes later. CI always builds cold. Match it before
+pushing.
 
 ## Ledger
 
