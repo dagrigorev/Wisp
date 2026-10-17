@@ -64,7 +64,201 @@ Color4F renderer_resolve_bg(const Renderer *r, const ScreenCell *cell) {
     return resolve_bg_attr(r, cell_attr(r, cell));
 }
 
+/* ─── Images ──────────────────────────────────────────────────────────────
+ *
+ * Original to Wisp, not a transliteration. Ghostty's renderer/image.zig is
+ * written against OpenGL and Metal texture objects and a batched quad
+ * pipeline; Direct2D has neither, so only the structure is borrowed:
+ *
+ *   - one GPU resource per image ID, not per placement;
+ *   - re-upload keyed on the terminal's monotonic per-image `generation`,
+ *     so a placement that merely moved costs nothing (upstream keeps the
+ *     same stamp beside its texture in `ImageMap`);
+ *   - a resource is released when its image leaves the terminal's
+ *     storage, which upstream spells `markForUnload` + a sweep in
+ *     `State.upload`;
+ *   - drawing walks the z-sorted placement list in ranges, with the
+ *     glyph pass between the z<0 and z>=0 ranges, which is upstream's
+ *     `kitty_bg_end` / `kitty_text_end` split.
+ *
+ * Everything else — the BGRA swizzle, the integer destination rect, the
+ * clip, the device-loss handling — is Direct2D's own problem.
+ *
+ * The snapshot hands us RGBA8888. An ID2D1HwndRenderTarget is not required
+ * to accept R8G8B8A8, and B8G8R8A8 is the format that is universally
+ * supported, so the bytes are swizzled into a scratch buffer on upload.
+ * That cost is paid once per generation change, never per frame. */
+
+struct ImageCacheEntry {
+    uint32_t     image_id;
+    uint64_t     generation;
+    ID2D1Bitmap *bitmap;
+};
+
+struct ImageCache {
+    ImageCacheEntry *entries;
+    int              len, cap;
+
+    /* Scratch for the RGBA -> BGRA swizzle, grown to the largest image
+       uploaded so far and reused. */
+    unsigned char   *scratch;
+    size_t           scratch_cap;
+};
+
+static void image_cache_release_all(Renderer *r) {
+    if (!r->images) return;
+    for (int i = 0; i < r->images->len; ++i) {
+        if (r->images->entries[i].bitmap) r->images->entries[i].bitmap->Release();
+    }
+    r->images->len = 0;
+}
+
+static void image_cache_destroy(Renderer *r) {
+    if (!r->images) return;
+    image_cache_release_all(r);
+    free(r->images->entries);
+    free(r->images->scratch);
+    free(r->images);
+    r->images = NULL;
+}
+
+static ImageCache *image_cache_get(Renderer *r) {
+    if (!r->images) r->images = (ImageCache *)calloc(1, sizeof(ImageCache));
+    return r->images;
+}
+
+static void image_cache_remove_at(ImageCache *c, int i) {
+    if (c->entries[i].bitmap) c->entries[i].bitmap->Release();
+    c->entries[i] = c->entries[c->len - 1];
+    c->len--;
+}
+
+/* Drop every cached bitmap whose image is no longer in the snapshot's
+   live-ID list. Called once per painted buffer, before drawing. */
+static void image_cache_evict(Renderer *r, const ScreenBuffer *sb) {
+    ImageCache *c = r->images;
+    if (!c) return;
+    /* An empty list is only authoritative when the snapshot actually
+       published one; a buffer that never carried images leaves the cache
+       alone rather than thrashing it. */
+    for (int i = c->len - 1; i >= 0; --i) {
+        if (!screen_view_has_image(sb, c->entries[i].image_id)) image_cache_remove_at(c, i);
+    }
+}
+
+static ID2D1Bitmap *image_upload(Renderer *r, const ScreenImagePlacement *p) {
+    ImageCache *c = image_cache_get(r);
+    if (!c || !r->render_target) return NULL;
+
+    for (int i = 0; i < c->len; ++i) {
+        if (c->entries[i].image_id != p->image_id) continue;
+        if (c->entries[i].generation == p->generation) return c->entries[i].bitmap;
+        /* Same ID, different pixels: the old bitmap is stale. */
+        image_cache_remove_at(c, i);
+        break;
+    }
+
+    if (!p->pixels || !p->pixel_width || !p->pixel_height) return NULL;
+
+    const size_t px = (size_t)p->pixel_width * (size_t)p->pixel_height;
+    const size_t bytes = px * 4;
+    if (bytes / 4 != px) return NULL; /* overflow on a protocol-sized image */
+
+    if (c->scratch_cap < bytes) {
+        unsigned char *grown = (unsigned char *)realloc(c->scratch, bytes);
+        if (!grown) return NULL;
+        c->scratch = grown;
+        c->scratch_cap = bytes;
+    }
+    for (size_t i = 0; i < px; ++i) {
+        const unsigned char *s = p->pixels + i * 4;
+        unsigned char *d = c->scratch + i * 4;
+        d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = s[3];
+    }
+
+    D2D1_BITMAP_PROPERTIES props;
+    props.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    /* The pixel pipeline in terminal/kitty/graphics_pixel.hpp produces
+       premultiplied alpha (upstream asks wuffs for RGBA_PREMUL), so this
+       must not be STRAIGHT or every translucent image darkens. */
+    props.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+    props.dpiX = props.dpiY = 96.0f;
+
+    D2D1_SIZE_U size = {(UINT32)p->pixel_width, (UINT32)p->pixel_height};
+    ID2D1Bitmap *bmp = NULL;
+    HRESULT hr = r->render_target->CreateBitmap(size, c->scratch,
+                                                (UINT32)(p->pixel_width * 4), props, &bmp);
+    if (FAILED(hr) || !bmp) {
+        WISP_LOG_ERROR("CreateBitmap for image %u: 0x%08X", p->image_id, hr);
+        return NULL;
+    }
+
+    if (c->len == c->cap) {
+        const int cap = c->cap ? c->cap * 2 : 8;
+        ImageCacheEntry *grown =
+            (ImageCacheEntry *)realloc(c->entries, (size_t)cap * sizeof(*grown));
+        if (!grown) { bmp->Release(); return NULL; }
+        c->entries = grown;
+        c->cap = cap;
+    }
+    c->entries[c->len].image_id = p->image_id;
+    c->entries[c->len].generation = p->generation;
+    c->entries[c->len].bitmap = bmp;
+    c->len++;
+    return bmp;
+}
+
+/* Draw placements [lo, hi) of the snapshot's z-sorted list.
+ *
+ * `ox`/`oy` are the painter's grid origin, already floored, and cell_w /
+ * cell_h are integral, so every edge computed here lands on the same whole
+ * pixel a glyph would. Doing this in float would put images on their own
+ * subpixel phase and make them shimmer against text that does not. */
+static void draw_images(Renderer *r, const ScreenBuffer *sb, int lo, int hi,
+                        float ox, float oy, int grid_cols, int grid_rows) {
+    if (!r->render_target || lo >= hi || grid_cols <= 0 || grid_rows <= 0) return;
+
+    const int cw = (int)r->cell_w;
+    const int ch = (int)r->cell_h;
+    if (cw <= 0 || ch <= 0) return;
+
+    const int gx = (int)ox;
+    const int gy = (int)oy;
+
+    /* Images may be larger than the pane, and a partly visible placement
+       is published with its real off-grid position, so the grid rectangle
+       is the clip. Without it Direct2D would happily paint over the
+       padding and the scrollbar. */
+    D2D1_RECT_F grid = {(float)gx, (float)gy, (float)(gx + grid_cols * cw),
+                        (float)(gy + grid_rows * ch)};
+    r->render_target->PushAxisAlignedClip(grid, D2D1_ANTIALIAS_MODE_ALIASED);
+
+    for (int i = lo; i < hi && i < sb->images_len; ++i) {
+        const ScreenImagePlacement *p = &sb->images[i];
+        ID2D1Bitmap *bmp = image_upload(r, p);
+        if (!bmp) continue;
+
+        const int x0 = gx + p->dest_col * cw + (int)p->cell_offset_x;
+        const int y0 = gy + p->dest_row * ch + (int)p->cell_offset_y;
+        D2D1_RECT_F dest = {(float)x0, (float)y0, (float)(x0 + (int)p->dest_width_px),
+                            (float)(y0 + (int)p->dest_height_px)};
+        D2D1_RECT_F src = {(float)p->source_x, (float)p->source_y,
+                           (float)(p->source_x + p->source_width),
+                           (float)(p->source_y + p->source_height)};
+
+        r->render_target->DrawBitmap(bmp, &dest, 1.0f,
+                                     D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, &src);
+    }
+
+    r->render_target->PopAxisAlignedClip();
+}
+
 static bool create_rt(Renderer *r) {
+    /* Bitmaps are created from the render target, so they die with it.
+       This is the device-loss path (D2DERR_RECREATE_TARGET) as well as the
+       DPI-change path; either way every cached image must go, and the next
+       paint re-uploads from the snapshot's still-live pixels. */
+    image_cache_release_all(r);
     if (r->render_target) { r->render_target->Release(); r->render_target=NULL; }
     RECT rc; GetClientRect(r->hwnd,&rc);
     D2D1_SIZE_U sz={(UINT32)(rc.right-rc.left),(UINT32)(rc.bottom-rc.top)};
@@ -185,6 +379,10 @@ void renderer_paint_region(Renderer *r, const ScreenBuffer *sb, const RECT *rect
     r->bg_brush->SetColor(bgc);
     r->render_target->FillRectangle(clip, r->bg_brush);
 
+    /* Images whose bitmaps outlived their terminal images go now, before
+       any pass can draw one. */
+    image_cache_evict(r, sb);
+
     /* The same grid the terminal was sized to. Computing it differently here
      * is how the bottom row stopped being painted. */
     int max_cols = 1, max_rows = 1;
@@ -205,8 +403,21 @@ void renderer_paint_region(Renderer *r, const ScreenBuffer *sb, const RECT *rect
         search_mask = (bool *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (size_t)cols * sizeof(bool));
     }
 
+    /* Kitty's deepest tier: z below -2^30 draws under the cell
+       backgrounds, so it goes before anything else. */
+    draw_images(r, sb, 0, sb->images_bg_end, ox, oy, cols, rows);
+
+    /* Two passes over the grid so the image layers can sit between them:
+       pass 0 paints cell backgrounds, search highlight, selection and the
+       block cursor; pass 1 paints glyphs, underlines and the thin cursors.
+       Kitty puts negative-z images above the backgrounds but below the
+       text, which is exactly the seam between the two, and non-negative z
+       above both. This is upstream's kitty_bg_end / kitty_text_end split;
+       a single interleaved loop cannot express it. */
+    for (int pass = 0; pass < 2; pass++) {
+    if (pass == 1) draw_images(r, sb, sb->images_bg_end, sb->images_text_end, ox, oy, cols, rows);
     for (int row = 0; row < rows; row++) {
-        if (search_mask) {
+        if (pass == 0 && search_mask) {
             memset(search_mask, 0, (size_t)cols * sizeof(bool));
             char line[4096];
             int li = 0;
@@ -236,11 +447,12 @@ void renderer_paint_region(Renderer *r, const ScreenBuffer *sb, const RECT *rect
             Color4F fg = resolve_fg_attr(r, ca), bgcc = resolve_bg_attr(r, ca);
             if (ca.reverse) { Color4F t = fg; fg = bgcc; bgcc = t; }
 
-            if (bgcc.r != r->bg_color.r || bgcc.g != r->bg_color.g || bgcc.b != r->bg_color.b) {
+            if (pass == 0 &&
+                (bgcc.r != r->bg_color.r || bgcc.g != r->bg_color.g || bgcc.b != r->bg_color.b)) {
                 D2D1_COLOR_F d = to_d2d(bgcc); r->bg_brush->SetColor(d);
                 r->render_target->FillRectangle(cr, r->bg_brush);
             }
-            if (search_mask && search_mask[col]) {
+            if (pass == 0 && search_mask && search_mask[col]) {
                 D2D1_COLOR_F hc = to_d2d(r->cursor_color);
                 hc.a = 0.32f;
                 r->bg_brush->SetColor(hc);
@@ -256,20 +468,20 @@ void renderer_paint_region(Renderer *r, const ScreenBuffer *sb, const RECT *rect
                 else if (row == sr) in_sel = (col >= sc);
                 else if (row == er) in_sel = (col <= ec);
             }
-            if (in_sel) {
+            if (pass == 0 && in_sel) {
                 D2D1_COLOR_F selc = to_d2d(r->selection_color);
                 r->bg_brush->SetColor(selc);
                 r->render_target->FillRectangle(cr, r->bg_brush);
             }
             bool cursor_here = cursor_shown && active && r->cursor_blink_state &&
                                col == cursor_x && row == cursor_y && sb->cursor_visible;
-            if (cursor_here && r->cursor_style == CURSOR_BLOCK) {
+            if (pass == 0 && cursor_here && r->cursor_style == CURSOR_BLOCK) {
                 D2D1_COLOR_F cc = to_d2d(r->cursor_color);
                 r->cursor_brush->SetColor(cc);
                 r->render_target->FillRectangle(cr, r->cursor_brush);
             }
 
-            if (!cell->wide_cont && cell->ch && cell->ch != ' ') {
+            if (pass == 1 && !cell->wide_cont && cell->ch && cell->ch != ' ') {
                 if (cell->ch < 0x10000) { wch[0] = (wchar_t)cell->ch; wch[1] = 0; }
                 else { uint32_t cp = cell->ch - 0x10000; wch[0] = (wchar_t)(0xD800 | (cp >> 10)); wch[1] = (wchar_t)(0xDC00 | (cp & 0x3FF)); wch[2] = 0; }
 
@@ -292,7 +504,7 @@ void renderer_paint_region(Renderer *r, const ScreenBuffer *sb, const RECT *rect
                 }
             }
 
-            if (cursor_here && r->cursor_style != CURSOR_BLOCK) {
+            if (pass == 1 && cursor_here && r->cursor_style != CURSOR_BLOCK) {
                 D2D1_COLOR_F cc = to_d2d(r->cursor_color); r->cursor_brush->SetColor(cc);
                 switch (r->cursor_style) {
                     case CURSOR_BLOCK: break;
@@ -302,6 +514,10 @@ void renderer_paint_region(Renderer *r, const ScreenBuffer *sb, const RECT *rect
             }
         }
     }
+    } /* pass */
+
+    /* Non-negative z draws over the text. */
+    draw_images(r, sb, sb->images_text_end, sb->images_len, ox, oy, cols, rows);
 
     if (search_mask) HeapFree(GetProcessHeap(), 0, search_mask);
 
@@ -354,6 +570,15 @@ void renderer_paint(Renderer *r, const ScreenBuffer *sb, bool cursor_shown, int 
     float ox=(float)(r->reserved_left_px + r->padding_x);
     float oy=(float)(r->reserved_top_px + r->padding_y);
     wchar_t wch[4];
+
+    /* This whole-window painter is the older single-pane path; the app
+       paints through renderer_paint_region. Images are drawn here so the
+       two paths do not disagree about whether images exist at all, but the
+       split is only two-way: everything below z 0 goes under the cells
+       rather than between the background and the glyph, because this
+       loop interleaves background and glyph per cell. */
+    image_cache_evict(r, sb);
+    draw_images(r, sb, 0, sb->images_text_end, ox, oy, cols, rows);
 
     for (int row=0;row<rows;row++) for (int col=0;col<cols;col++) {
         const ScreenCell *cell = screen_visible_cell(sb, row, col);
@@ -430,6 +655,8 @@ void renderer_paint(Renderer *r, const ScreenBuffer *sb, bool cursor_shown, int 
         }
     }
 
+    draw_images(r, sb, sb->images_text_end, sb->images_len, ox, oy, cols, rows);
+
     if (r->cfg && r->cfg->scrollbar.enabled && !sb->alt_screen_active && sb->scrollback_count > 0) {
         int total_lines = sb->scrollback_count + sb->rows;
         int max_offset = screen_max_viewport_offset(sb);
@@ -486,6 +713,7 @@ void renderer_destroy(Renderer *r) {
     if (r->cursor_brush) { r->cursor_brush->Release(); r->cursor_brush=NULL; }
     if (r->bg_brush)     { r->bg_brush->Release();     r->bg_brush=NULL; }
     if (r->fg_brush)     { r->fg_brush->Release();     r->fg_brush=NULL; }
+    image_cache_destroy(r);
     if (r->render_target){ r->render_target->Release();r->render_target=NULL; }
     if (r->d2d_factory)  { r->d2d_factory->Release();  r->d2d_factory=NULL; }
 }

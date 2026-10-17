@@ -61,6 +61,16 @@ struct VtPane {
      * failure, in which case the pane keeps its old size. */
     bool resize(unsigned cols, unsigned rows);
 
+    /* Tell the terminal how many pixels a cell is.
+     *
+     * Kitty graphics geometry is defined in pixels: a placement's size,
+     * its sub-cell offset and the grid span it covers all come from
+     * terminal.width_px / terminal.cols. Nothing else in Wisp needs the
+     * pixel geometry, so this is the one place it is set, and it must be
+     * called (and re-called after a font or DPI change) or no image will
+     * have a drawable rectangle. Zero disables pixel geometry again. */
+    void setCellSizePx(unsigned cell_w, unsigned cell_h);
+
     /* Viewport movement. Positive scrolls back (up) through scrollback. */
     void scrollViewport(int delta_rows);
     void pageViewport(int pages);
@@ -86,8 +96,13 @@ struct VtPane {
     vt::Terminal terminal;
     Stream *stream;
 
+    /* The cell size last handed to setCellSizePx, remembered so a plain
+     * resize can carry it forward. Zero until the renderer reports one. */
+    unsigned cell_px_w;
+    unsigned cell_px_h;
+
     VtPane() : view(), ctx(nullptr), write_fn(nullptr), title_fn(nullptr), bell_fn(nullptr),
-               terminal(), stream(nullptr) {}
+               terminal(), stream(nullptr), cell_px_w(0), cell_px_h(0) {}
 };
 
 } /* namespace terminal */

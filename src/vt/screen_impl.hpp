@@ -476,6 +476,9 @@ inline bool Screen::cursorDownScroll() {
     assert(cursor.y == pages.rows - 1);
     IntegrityGuard g = {this};
 
+    /* Scrolling dirties the images because it updates their placements pins. */
+    kitty_images.dirty = true;
+
     /* If we have no scrollback, then we shift all our rows instead. */
     if (no_scrollback) {
         /* If we have a single-row screen, we have no rows to shift
@@ -1125,9 +1128,12 @@ inline bool Screen::resize(const Resize &opts) {
     }
 
     /* No more failures are possible after this. Enforced by compiler
-     * because we do NO cleanup of the state below.
-     *
-     * If we have no scrollback and we shrunk our rows, we must explicitly
+     * because we do NO cleanup of the state below. */
+
+    /* Resizing moves image placements, so mark their geometry as dirty. */
+    kitty_images.dirty = true;
+
+    /* If we have no scrollback and we shrunk our rows, we must explicitly
      * erase our history. This is because PageList always keeps at least
      * a page size of history. */
     if (no_scrollback) pages.eraseHistory(Maybe<point::Point>());
