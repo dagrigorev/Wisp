@@ -13,9 +13,9 @@ License: MIT, (c) 2024 Mitchell Hashimoto and Ghostty contributors
 | | Files | Lines |
 |---|---:|---:|
 | Upstream `src/` (Zig) | 589 | 342401 |
-| Ported | - | 120322 |
-| Not applicable to this port | - | 44430 |
-| Remaining | - | 177649 |
+| Ported | - | 122746 |
+| Not applicable to this port | - | 44558 |
+| Remaining | - | 175097 |
 | ...of which partially ported | - | 0 |
 
 Status values: `todo`, `wip`, `done`, `n/a`. A `wip` file counts
@@ -34,6 +34,15 @@ subsystem was ported and the flag enabled. Anything still marked
 `n/a` for that reason is a stale cell, not a decision. Statuses are
 carried forward across regenerations, so a wrong one persists until
 somebody checks it against the tree.
+
+`n/a` also covers Zig-language scaffolding with no C++ analogue: a
+module aggregator that only re-exports (`terminal/main.zig`), since
+headers already serve that role, and Zig build-script code, since
+CMake does (`terminal/build_options.zig`, whose parser half is
+ported, leaving it `wip`). One is conditional:
+`terminal/lib.zig` is C ABI scaffolding gated on `c_abi`, so it
+returns to scope if `terminal/c/*` is ever ported. See
+docs/PORTING_CONVENTIONS.md on status.
 
 ## Modules
 
@@ -97,7 +106,7 @@ somebody checks it against the tree.
 | `terminal/stream_terminal.zig` | 6604 | done |
 | `terminal/stream.zig` | 5407 | done |
 | `terminal/page.zig` | 4523 | done |
-| `terminal/render.zig` | 2397 | todo |
+| `terminal/render.zig` | 2397 | done |
 | `terminal/SelectionGesture.zig` | 2110 | done |
 | `terminal/hash_map.zig` | 1918 | done |
 | `terminal/Selection.zig` | 1676 | done |
@@ -133,13 +142,13 @@ somebody checks it against the tree.
 | `terminal/point.zig` | 112 | done |
 | `terminal/ansi.zig` | 109 | done |
 | `terminal/x11_color.zig` | 107 | done |
-| `terminal/main.zig` | 104 | todo |
+| `terminal/main.zig` | 104 | n/a |
 | `terminal/sys.zig` | 102 | done |
 | `terminal/csi.zig` | 55 | done |
 | `terminal/focus.zig` | 39 | done |
 | `terminal/selection_codepoints.zig` | 31 | done |
 | `terminal/cursor.zig` | 25 | done |
-| `terminal/lib.zig` | 24 | todo |
+| `terminal/lib.zig` | 24 | n/a |
 | `terminal/search.zig` | 23 | done |
 | `terminal/kitty.zig` | 17 | done |
 | `terminal/compress.zig` | 15 | done |
