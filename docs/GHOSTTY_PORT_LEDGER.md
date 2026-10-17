@@ -97,7 +97,7 @@ somebody checks it against the tree.
 | `terminal/stream_terminal.zig` | 6604 | done |
 | `terminal/stream.zig` | 5407 | done |
 | `terminal/page.zig` | 4523 | done |
-| `terminal/render.zig` | 2397 | todo |
+| `terminal/render.zig` | 2397 | done |
 | `terminal/SelectionGesture.zig` | 2110 | done |
 | `terminal/hash_map.zig` | 1918 | done |
 | `terminal/Selection.zig` | 1676 | done |
