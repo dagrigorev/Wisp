@@ -95,6 +95,25 @@ struct ArrayListUnmanaged {
         return true;
     }
 
+    /* Wisp: added for render.hpp. std.ArrayList.appendSliceAssumeCapacity. */
+    void appendSliceAssumeCapacity(const T *src, size_t n) {
+        if (n > 0) memcpy((void *)(items + items_len), (const void *)src, n * sizeof(T));
+        items_len += n;
+    }
+
+    /* Wisp: added for render.hpp. std.ArrayList.resize — grows with
+     * indeterminate (uninitialized) new items, as Zig's does. */
+    bool resize(Allocator alloc, size_t new_len) {
+        if (new_len > items_len) {
+            if (!ensureTotalCapacity(alloc, new_len)) return false;
+        }
+        items_len = new_len;
+        return true;
+    }
+
+    /* Wisp: added for render.hpp. std.ArrayList.shrinkRetainingCapacity. */
+    void shrinkRetainingCapacity(size_t new_len) { items_len = new_len; }
+
     void clearRetainingCapacity() { items_len = 0; }
 
     void clearAndFree(Allocator alloc) { deinit(alloc); }
