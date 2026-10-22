@@ -44,6 +44,7 @@ mapping.
 | slice `[]T` | pointer + length pair |
 | `union(enum)` | tag enum + payload fields |
 | `*std.Io.Writer` | `std::string *` — writes cannot fail, so no error path |
+| `*std.Io.Reader` | `zigstd::Reader *` (a cursor over bytes) or `zigstd::LimitedReader *` (reads through a caller-provided buffer). A `decode` is a template over the reader type, which is what upstream gets free by taking the interface pointer. |
 | `log.debug` / `log.warn` etc. | a comment; there is no logging in the port |
 | `defer` / `errdefer` | an RAII guard |
 | `+|` / `-|` saturating ops | the saturating helpers |
@@ -165,6 +166,36 @@ When passing a build type to CMake from PowerShell, **quote the whole argument**
 `"-DCMAKE_BUILD_TYPE=$Configuration"`. A bare dash-leading argument is passed to a
 native command literally, variable unexpanded — which is how both CI matrix legs once
 compiled identically and how released binaries shipped unoptimized.
+
+### Golden fixtures
+
+The snapshot subsystem's tests compare encoder output against annotated hex
+references. Upstream `@embedFile`s them at compile time from
+`src/terminal/snapshot/testdata`; this port reads them at runtime, so the copies live
+in `tests/snapshot_testdata` and each test target is given a
+`WISP_SNAPSHOT_TESTDATA` define pointing there — a test run by ctest does not share
+the source tree's working directory.
+
+Copying those files in is deliberate, and consistent with the rule that the upstream
+clone never enters the repo: the prohibition is on the *clone*, not on ported
+artifacts. Upstream test code is already copied in wholesale, and a golden vector is
+the same category of MIT-licensed content. It is also the strongest evidence available
+that the wire format matches — `snapshot_envelope::golden_encoding` passes against
+upstream's own bytes, which no amount of self-consistent round-tripping would prove.
+
+### A reader needs a real buffer
+
+When porting something whose whole purpose is to dodge a Zig standard-library hazard,
+check that the port can still *express* the hazard, or the test guarding it becomes
+decoration.
+
+`snapshot/io.zig` exists because `std.Io.Reader.takeInt` asserts the reader's buffer is
+at least `@sizeOf(T)`, and its one test reads a `u32` through a one-byte buffer to prove
+its own `readInt` does not. Modelled as a bare cursor over a span, that test asserts
+nothing: the failure it describes cannot happen. `zigstd::LimitedReader` therefore
+refills from a caller-provided buffer for real, and the ported test was mutation-checked
+— reintroducing the "whole read must fit the buffer" assumption fails that test and no
+other.
 
 ### An incremental build is not evidence
 
