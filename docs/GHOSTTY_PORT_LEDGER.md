@@ -13,10 +13,10 @@ License: MIT, (c) 2024 Mitchell Hashimoto and Ghostty contributors
 | | Files | Lines |
 |---|---:|---:|
 | Upstream `src/` (Zig) | 589 | 342401 |
-| Ported | - | 122746 |
+| Ported | - | 122905 |
 | Not applicable to this port | - | 44558 |
-| Remaining | - | 175097 |
-| ...of which partially ported | - | 0 |
+| Remaining | - | 174938 |
+| ...of which partially ported | - | 812 |
 
 Status values: `todo`, `wip`, `done`, `n/a`. A `wip` file counts
 toward *remaining*, not ported — a partially ported file is not
@@ -318,13 +318,13 @@ _Not applicable: Linux GTK application runtime._
 | `terminal/snapshot/history.zig` | 716 | todo |
 | `terminal/snapshot/record.zig` | 601 | todo |
 | `terminal/snapshot/hyperlink.zig` | 493 | todo |
-| `terminal/snapshot/fixture.zig` | 479 | todo |
+| `terminal/snapshot/fixture.zig` | 479 | wip |
 | `terminal/snapshot/style.zig` | 423 | todo |
 | `terminal/snapshot/continuation.zig` | 320 | todo |
 | `terminal/snapshot/main.zig` | 182 | todo |
 | `terminal/snapshot/checkpoint.zig` | 177 | todo |
-| `terminal/snapshot/envelope.zig` | 104 | todo |
-| `terminal/snapshot/io.zig` | 55 | todo |
+| `terminal/snapshot/envelope.zig` | 104 | done |
+| `terminal/snapshot/io.zig` | 55 | done |
 
 ### `input`
 
