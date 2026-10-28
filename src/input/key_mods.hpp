@@ -18,9 +18,8 @@
  *     partition putting right-sided keys first; upstream's sort is unstable,
  *     this one keeps relative order within each group.
  *   - Storage is std::vector, so allocation failure is not reported.
- *   - `formatEntry` takes any formatter with `formatEntryVoid()` and
- *     `formatEntryString(const std::string &)`, the two `formatEntry(T, ...)`
- *     instantiations it calls (config/formatter.zig is not ported yet).
+ *   - `formatEntry` is a template over the formatter, as upstream's
+ *     `anytype`; it is called with config/formatter.hpp's EntryFormatter.
  */
 #pragma once
 #ifndef WISP_INPUT_KEY_MODS_HPP
@@ -36,6 +35,7 @@
 #include <utility>
 #include <vector>
 
+#include "../datastruct/comparison.hpp"
 #include "config.hpp"
 
 namespace wisp {
@@ -460,7 +460,7 @@ struct RemapSet {
     template <typename Formatter>
     void formatEntry(Formatter formatter) const {
         if (map.count() == 0) {
-            formatter.formatEntryVoid();
+            formatter.formatEntry(::wisp::datastruct::comparison::Void());
             return;
         }
 
@@ -472,7 +472,7 @@ struct RemapSet {
             formatMod(&writer, from);
             writer.push_back('=');
             formatMod(&writer, to);
-            formatter.formatEntryString(writer);
+            formatter.formatEntry(writer);
         }
     }
 

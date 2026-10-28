@@ -293,7 +293,7 @@ _Not applicable: Linux GTK application runtime._
 | `config/CApi.zig` | 280 | todo |
 | `config/io.zig` | 254 | todo |
 | `config/c_get.zig` | 240 | todo |
-| `config/formatter.zig` | 232 | todo |
+| `config/formatter.zig` | 232 | done |
 | `config/RepeatableStringMap.zig` | 198 | todo |
 | `config/file_load.zig` | 176 | todo |
 | `config/string.zig` | 162 | todo |
