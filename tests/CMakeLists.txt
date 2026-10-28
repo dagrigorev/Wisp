@@ -125,3 +125,6 @@ target_compile_definitions(test_snapshot_continuation_port PRIVATE
 add_wisp_test(test_snapshot_style_port test_snapshot_style_port.cpp)
 target_compile_definitions(test_snapshot_style_port PRIVATE
     "WISP_SNAPSHOT_TESTDATA=\"${CMAKE_CURRENT_SOURCE_DIR}/snapshot_testdata\"")
+add_wisp_test(test_snapshot_hyperlink_port test_snapshot_hyperlink_port.cpp)
+target_compile_definitions(test_snapshot_hyperlink_port PRIVATE
+    "WISP_SNAPSHOT_TESTDATA=\"${CMAKE_CURRENT_SOURCE_DIR}/snapshot_testdata\"")
