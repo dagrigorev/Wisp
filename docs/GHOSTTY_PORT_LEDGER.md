@@ -293,7 +293,7 @@ _Not applicable: Linux GTK application runtime._
 | `config/CApi.zig` | 280 | todo |
 | `config/io.zig` | 254 | todo |
 | `config/c_get.zig` | 240 | todo |
-| `config/formatter.zig` | 232 | todo |
+| `config/formatter.zig` | 232 | done |
 | `config/RepeatableStringMap.zig` | 198 | todo |
 | `config/file_load.zig` | 176 | todo |
 | `config/string.zig` | 162 | todo |
@@ -331,22 +331,22 @@ _Not applicable: Linux GTK application runtime._
 | File | Lines | Status |
 |---|---:|---|
 | `input/Binding.zig` | 4921 | todo |
-| `input/key_encode.zig` | 2844 | todo |
-| `input/key_mods.zig` | 913 | todo |
-| `input/key.zig` | 876 | todo |
-| `input/mouse_encode.zig` | 781 | todo |
+| `input/key_encode.zig` | 2844 | done |
+| `input/key_mods.zig` | 913 | done |
+| `input/key.zig` | 876 | done |
+| `input/mouse_encode.zig` | 781 | done |
 | `input/command.zig` | 768 | todo |
-| `input/keycodes.zig` | 673 | todo |
+| `input/keycodes.zig` | 673 | done |
 | `input/paste.zig` | 392 | done |
-| `input/function_keys.zig` | 333 | todo |
+| `input/function_keys.zig` | 333 | done |
 | `input/KeymapDarwin.zig` | 289 | todo |
-| `input/kitty.zig` | 134 | todo |
+| `input/kitty.zig` | 134 | done |
 | `input/helpgen_actions.zig` | 112 | todo |
-| `input/mouse.zig` | 110 | todo |
+| `input/mouse.zig` | 110 | done |
 | `input/Link.zig` | 79 | todo |
-| `input/keyboard.zig` | 58 | todo |
-| `input/KeymapNoop.zig` | 39 | todo |
-| `input/config.zig` | 8 | todo |
+| `input/keyboard.zig` | 58 | done |
+| `input/KeymapNoop.zig` | 39 | done |
+| `input/config.zig` | 8 | done |
 
 ### `src`
 
@@ -418,7 +418,7 @@ _Not applicable: Linux GTK application runtime._
 | `renderer/Thread.zig` | 855 | todo |
 | `renderer/cell.zig` | 706 | todo |
 | `renderer/Metal.zig` | 491 | todo |
-| `renderer/size.zig` | 458 | todo |
+| `renderer/size.zig` | 458 | done |
 | `renderer/OpenGL.zig` | 457 | todo |
 | `renderer/shadertoy.zig` | 429 | todo |
 | `renderer/Overlay.zig` | 416 | todo |
@@ -588,7 +588,7 @@ _Not applicable: Zig build system plumbing._
 | `datastruct/split_tree.zig` | 2529 | todo |
 | `datastruct/circ_buf.zig` | 921 | todo |
 | `datastruct/segmented_list.zig` | 533 | done |
-| `datastruct/comparison.zig` | 432 | todo |
+| `datastruct/comparison.zig` | 432 | done |
 | `datastruct/untouched_pool.zig` | 297 | done |
 | `datastruct/blocking_queue.zig` | 261 | todo |
 | `datastruct/cache_table.zig` | 181 | todo |
