@@ -312,16 +312,16 @@ _Not applicable: Linux GTK application runtime._
 |---|---:|---|
 | `terminal/snapshot/screen.zig` | 2460 | done |
 | `terminal/snapshot/grid.zig` | 2403 | done |
-| `terminal/snapshot/snapshot.zig` | 2100 | todo |
-| `terminal/snapshot/terminal.zig` | 1850 | todo |
+| `terminal/snapshot/snapshot.zig` | 2100 | done |
+| `terminal/snapshot/terminal.zig` | 1850 | done |
 | `terminal/snapshot/page.zig` | 1828 | done |
-| `terminal/snapshot/history.zig` | 716 | todo |
+| `terminal/snapshot/history.zig` | 716 | done |
 | `terminal/snapshot/record.zig` | 601 | done |
 | `terminal/snapshot/hyperlink.zig` | 493 | done |
-| `terminal/snapshot/fixture.zig` | 479 | wip |
+| `terminal/snapshot/fixture.zig` | 479 | done |
 | `terminal/snapshot/style.zig` | 423 | done |
 | `terminal/snapshot/continuation.zig` | 320 | done |
-| `terminal/snapshot/main.zig` | 182 | todo |
+| `terminal/snapshot/main.zig` | 182 | done |
 | `terminal/snapshot/checkpoint.zig` | 177 | done |
 | `terminal/snapshot/envelope.zig` | 104 | done |
 | `terminal/snapshot/io.zig` | 55 | done |
@@ -337,7 +337,7 @@ _Not applicable: Linux GTK application runtime._
 | `input/mouse_encode.zig` | 781 | todo |
 | `input/command.zig` | 768 | todo |
 | `input/keycodes.zig` | 673 | todo |
-| `input/paste.zig` | 392 | todo |
+| `input/paste.zig` | 392 | done |
 | `input/function_keys.zig` | 333 | todo |
 | `input/KeymapDarwin.zig` | 289 | todo |
 | `input/kitty.zig` | 134 | todo |
@@ -361,7 +361,7 @@ _Not applicable: Linux GTK application runtime._
 | `crc32c.zig` | 424 | done |
 | `quirks_memset.zig` | 338 | todo |
 | `surface_mouse.zig` | 297 | todo |
-| `tripwire.zig` | 288 | todo |
+| `tripwire.zig` | 288 | done |
 | `main_ghostty.zig` | 266 | todo |
 | `main_c.zig` | 265 | todo |
 | `helpgen.zig` | 188 | todo |
@@ -467,25 +467,25 @@ _Not applicable: Linux GTK application runtime._
 
 | File | Lines | Status |
 |---|---:|---|
-| `terminal/osc/parsers/semantic_prompt.zig` | 1292 | todo |
-| `terminal/osc/parsers/kitty_desktop_notification.zig` | 1201 | todo |
-| `terminal/osc/parsers/osc9.zig` | 1141 | todo |
-| `terminal/osc/parsers/color.zig` | 781 | todo |
-| `terminal/osc/parsers/kitty_clipboard_protocol.zig` | 681 | todo |
-| `terminal/osc/parsers/context_signal.zig` | 541 | todo |
-| `terminal/osc/parsers/iterm2.zig` | 435 | todo |
-| `terminal/osc/parsers/kitty_text_sizing.zig` | 255 | todo |
-| `terminal/osc/parsers/kitty_color.zig` | 212 | todo |
-| `terminal/osc/parsers/hyperlink.zig` | 164 | todo |
-| `terminal/osc/parsers/kitty_dnd_protocol.zig` | 138 | todo |
-| `terminal/osc/parsers/clipboard_operation.zig` | 122 | todo |
-| `terminal/osc/parsers/change_window_title.zig` | 119 | todo |
+| `terminal/osc/parsers/semantic_prompt.zig` | 1292 | done |
+| `terminal/osc/parsers/kitty_desktop_notification.zig` | 1201 | done |
+| `terminal/osc/parsers/osc9.zig` | 1141 | done |
+| `terminal/osc/parsers/color.zig` | 781 | done |
+| `terminal/osc/parsers/kitty_clipboard_protocol.zig` | 681 | done |
+| `terminal/osc/parsers/context_signal.zig` | 541 | done |
+| `terminal/osc/parsers/iterm2.zig` | 435 | done |
+| `terminal/osc/parsers/kitty_text_sizing.zig` | 255 | done |
+| `terminal/osc/parsers/kitty_color.zig` | 212 | done |
+| `terminal/osc/parsers/hyperlink.zig` | 164 | done |
+| `terminal/osc/parsers/kitty_dnd_protocol.zig` | 138 | done |
+| `terminal/osc/parsers/clipboard_operation.zig` | 122 | done |
+| `terminal/osc/parsers/change_window_title.zig` | 119 | done |
 | `terminal/osc/kitty_metadata.zig` | 94 | done |
-| `terminal/osc/parsers/rxvt_extension.zig` | 59 | todo |
-| `terminal/osc/parsers/report_pwd.zig` | 48 | todo |
-| `terminal/osc/parsers/mouse_shape.zig` | 39 | todo |
+| `terminal/osc/parsers/rxvt_extension.zig` | 59 | done |
+| `terminal/osc/parsers/report_pwd.zig` | 48 | done |
+| `terminal/osc/parsers/mouse_shape.zig` | 39 | done |
 | `terminal/osc/encoding.zig` | 38 | done |
-| `terminal/osc/parsers/change_window_icon.zig` | 33 | todo |
+| `terminal/osc/parsers/change_window_icon.zig` | 33 | done |
 | `terminal/osc/parsers.zig` | 23 | done |
 
 ### `termio`
@@ -587,12 +587,12 @@ _Not applicable: Zig build system plumbing._
 |---|---:|---|
 | `datastruct/split_tree.zig` | 2529 | todo |
 | `datastruct/circ_buf.zig` | 921 | todo |
-| `datastruct/segmented_list.zig` | 533 | todo |
+| `datastruct/segmented_list.zig` | 533 | done |
 | `datastruct/comparison.zig` | 432 | todo |
-| `datastruct/untouched_pool.zig` | 297 | todo |
+| `datastruct/untouched_pool.zig` | 297 | done |
 | `datastruct/blocking_queue.zig` | 261 | todo |
 | `datastruct/cache_table.zig` | 181 | todo |
-| `datastruct/intrusive_linked_list.zig` | 181 | todo |
+| `datastruct/intrusive_linked_list.zig` | 181 | done |
 | `datastruct/wasm_page_pool.zig` | 162 | todo |
 | `datastruct/limited_allocator.zig` | 124 | todo |
 | `datastruct/message_data.zig` | 124 | todo |
@@ -618,7 +618,7 @@ _Not applicable: Zig build system plumbing._
 |---|---:|---|
 | `os/flatpak.zig` | 521 | todo |
 | `os/windows.zig` | 378 | todo |
-| `os/string_encoding.zig` | 307 | todo |
+| `os/string_encoding.zig` | 307 | done |
 | `os/xdg.zig` | 269 | todo |
 | `os/locale.zig` | 232 | todo |
 | `os/i18n.zig` | 210 | todo |
@@ -792,8 +792,8 @@ _Not applicable: Apple Metal backend._
 
 | File | Lines | Status |
 |---|---:|---|
-| `simd/vt.zig` | 574 | todo |
-| `simd/base64.zig` | 442 | todo |
+| `simd/vt.zig` | 574 | done |
+| `simd/base64.zig` | 442 | done |
 | `simd/base64_scalar.zig` | 153 | todo |
 | `simd/codepoint_width.zig` | 52 | todo |
 | `simd/index_of.zig` | 35 | todo |
@@ -847,7 +847,7 @@ _Not applicable: benchmark data generation._
 | `unicode/lut.zig` | 188 | todo |
 | `unicode/props_uucode.zig` | 83 | todo |
 | `unicode/symbols_uucode.zig` | 66 | todo |
-| `unicode/main.zig` | 63 | todo |
+| `unicode/main.zig` | 63 | done |
 | `unicode/props.zig` | 63 | todo |
 | `unicode/props_table.zig` | 18 | todo |
 | `unicode/symbols_table.zig` | 17 | todo |
