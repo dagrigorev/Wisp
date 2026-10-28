@@ -303,8 +303,20 @@ struct PayloadReader {
      * reader's own buffer. Valid until the next `take`. */
     std::string take_buf;
 
+    /* Wisp: one byte drawn by `peekByte` and not yet consumed. It has
+     * already passed the limit and the hasher, so `finish` treats it as
+     * buffered and therefore not exhausted, as upstream's hashing reader
+     * does with its buffer. */
+    bool has_peek = false;
+    uint8_t peek_byte = 0;
+
     /* std.Io.Reader.readSliceAll through the limit and the hasher. */
     bool readSliceAll(void *dest, size_t n, zigstd::ReadError *err) {
+        if (n > 0 && has_peek) {
+            *(uint8_t *)dest = peek_byte;
+            has_peek = false;
+            return readSliceAll((uint8_t *)dest + 1, n - 1, err);
+        }
         const size_t take_n = n < limit_remaining ? n : limit_remaining;
         if (take_n > 0) {
             if (!source_read(source, dest, take_n, err)) {
@@ -345,8 +357,31 @@ struct PayloadReader {
         return true;
     }
 
+    /* std.Io.Reader.peekByte */
+    bool peekByte(uint8_t *out, zigstd::ReadError *err) {
+        if (!has_peek) {
+            uint8_t b = 0;
+            if (!readSliceAll(&b, 1, err)) return false;
+            peek_byte = b;
+            has_peek = true;
+        }
+        *out = peek_byte;
+        return true;
+    }
+
+    /* std.Io.Reader.discardRemaining: consume (and hash) the rest of the
+     * payload. Returns the number of bytes discarded. */
+    size_t discardRemaining() {
+        size_t n = has_peek ? 1 : 0;
+        has_peek = false;
+        const size_t rest = limit_remaining;
+        zigstd::ReadError ignored = zigstd::ReadError::none;
+        if (discardAll(rest, &ignored)) n += rest;
+        return n;
+    }
+
     /* Payload bytes not yet consumed. */
-    size_t remaining() const { return limit_remaining; }
+    size_t remaining() const { return limit_remaining + (has_peek ? 1 : 0); }
 };
 
 /* Reads one complete record.
@@ -400,6 +435,7 @@ struct Reader {
         payload.source = (void *)source;
         payload.source_read = &readThunk<SourceT>;
         payload.limit_remaining = header.payload_len;
+        payload.has_peek = false;
         payload.checksum.init(header.tag, header.payload_len);
         *err = InitError::none;
         return true;
@@ -410,7 +446,7 @@ struct Reader {
 
     /* Require exact payload exhaustion and validate its CRC32C. */
     FinishError finish() {
-        if (payload.limit_remaining != 0) return FinishError::PayloadNotExhausted;
+        if (payload.has_peek || payload.limit_remaining != 0) return FinishError::PayloadNotExhausted;
         if (payload.checksum.final() != header.crc32c) return FinishError::InvalidChecksum;
         return FinishError::none;
     }
