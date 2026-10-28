@@ -93,6 +93,23 @@ struct Reader {
         return true;
     }
 
+    /* std.Io.Reader.peekByte */
+    bool peekByte(uint8_t *out, ReadError *err) {
+        if (remaining() < 1) {
+            if (err != nullptr) *err = ReadError::EndOfStream;
+            return false;
+        }
+        *out = buf[pos];
+        return true;
+    }
+
+    /* std.Io.Reader.discardRemaining */
+    size_t discardRemaining() {
+        const size_t n = remaining();
+        pos = len;
+        return n;
+    }
+
     /* Hand out the next n bytes without copying. Not an upstream method;
      * used where upstream takes a slice of an already-fixed buffer. */
     const uint8_t *take(size_t n, ReadError *err) {
