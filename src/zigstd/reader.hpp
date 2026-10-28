@@ -74,6 +74,22 @@ struct Reader {
         return true;
     }
 
+    /* std.Io.Reader.takeByte. */
+    bool takeByte(uint8_t *out, ReadError *err) {
+        return readSliceAll(out, 1, err);
+    }
+
+    /* std.Io.Reader.discardAll: skip exactly n bytes or fail. */
+    bool discardAll(size_t n, ReadError *err) {
+        if (remaining() < n) {
+            pos = len;
+            if (err != nullptr) *err = ReadError::EndOfStream;
+            return false;
+        }
+        pos += n;
+        return true;
+    }
+
     /* Hand out the next n bytes without copying. Not an upstream method;
      * used where upstream takes a slice of an already-fixed buffer. */
     const uint8_t *take(size_t n, ReadError *err) {
@@ -139,6 +155,22 @@ struct LimitedReader {
             memcpy(out + done, buf + buf_pos, take_n);
             buf_pos += take_n;
             done += take_n;
+        }
+        return true;
+    }
+
+    /* std.Io.Reader.takeByte. */
+    bool takeByte(uint8_t *out, ReadError *err) {
+        return readSliceAll(out, 1, err);
+    }
+
+    /* std.Io.Reader.discardAll, served through the buffer like any read. */
+    bool discardAll(size_t n, ReadError *err) {
+        uint8_t scratch[64];
+        while (n > 0) {
+            const size_t step = n < sizeof scratch ? n : sizeof scratch;
+            if (!readSliceAll(scratch, step, err)) return false;
+            n -= step;
         }
         return true;
     }
