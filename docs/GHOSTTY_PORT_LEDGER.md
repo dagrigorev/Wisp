@@ -322,7 +322,7 @@ _Not applicable: Linux GTK application runtime._
 | `terminal/snapshot/style.zig` | 423 | todo |
 | `terminal/snapshot/continuation.zig` | 320 | todo |
 | `terminal/snapshot/main.zig` | 182 | todo |
-| `terminal/snapshot/checkpoint.zig` | 177 | todo |
+| `terminal/snapshot/checkpoint.zig` | 177 | done |
 | `terminal/snapshot/envelope.zig` | 104 | done |
 | `terminal/snapshot/io.zig` | 55 | done |
 
