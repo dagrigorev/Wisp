@@ -137,3 +137,6 @@ target_compile_definitions(test_snapshot_page_port PRIVATE
 add_wisp_test(test_snapshot_screen_port test_snapshot_screen_port.cpp)
 target_compile_definitions(test_snapshot_screen_port PRIVATE
     "WISP_SNAPSHOT_TESTDATA=\"${CMAKE_CURRENT_SOURCE_DIR}/snapshot_testdata\"")
+add_wisp_test(test_snapshot_history_port test_snapshot_history_port.cpp)
+target_compile_definitions(test_snapshot_history_port PRIVATE
+    "WISP_SNAPSHOT_TESTDATA=\"${CMAKE_CURRENT_SOURCE_DIR}/snapshot_testdata\"")

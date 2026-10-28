@@ -315,7 +315,7 @@ _Not applicable: Linux GTK application runtime._
 | `terminal/snapshot/snapshot.zig` | 2100 | todo |
 | `terminal/snapshot/terminal.zig` | 1850 | todo |
 | `terminal/snapshot/page.zig` | 1828 | done |
-| `terminal/snapshot/history.zig` | 716 | todo |
+| `terminal/snapshot/history.zig` | 716 | done |
 | `terminal/snapshot/record.zig` | 601 | done |
 | `terminal/snapshot/hyperlink.zig` | 493 | done |
 | `terminal/snapshot/fixture.zig` | 479 | wip |
