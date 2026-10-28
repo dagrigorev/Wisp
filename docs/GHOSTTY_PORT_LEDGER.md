@@ -293,7 +293,7 @@ _Not applicable: Linux GTK application runtime._
 | `config/CApi.zig` | 280 | todo |
 | `config/io.zig` | 254 | todo |
 | `config/c_get.zig` | 240 | todo |
-| `config/formatter.zig` | 232 | todo |
+| `config/formatter.zig` | 232 | done |
 | `config/RepeatableStringMap.zig` | 198 | todo |
 | `config/file_load.zig` | 176 | todo |
 | `config/string.zig` | 162 | todo |
@@ -588,7 +588,7 @@ _Not applicable: Zig build system plumbing._
 | `datastruct/split_tree.zig` | 2529 | todo |
 | `datastruct/circ_buf.zig` | 921 | todo |
 | `datastruct/segmented_list.zig` | 533 | done |
-| `datastruct/comparison.zig` | 432 | todo |
+| `datastruct/comparison.zig` | 432 | done |
 | `datastruct/untouched_pool.zig` | 297 | done |
 | `datastruct/blocking_queue.zig` | 261 | todo |
 | `datastruct/cache_table.zig` | 181 | todo |

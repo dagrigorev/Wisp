@@ -10,10 +10,6 @@
  *     Mods_backing_layout here.
  *   - "translation macos-option-as-alt" is skipped upstream on every
  *     non-Darwin OS and so is not ported (Wisp targets Windows).
- *   - The formatEntry tests call config/formatter.zig's entryFormatter,
- *     which is not ported yet. EntryFormatter below transliterates the two
- *     branches of its `formatEntry` that RemapSet reaches: `.void` writes
- *     "name = \n" and `[]const u8` writes "name = value\n".
  */
 
 #include <string.h>
@@ -22,34 +18,13 @@
 
 #include "test_helpers.h"
 #include "../src/input/key.hpp"
+#include "../src/config/formatter.hpp"
 #include "../src/input/key_mods.hpp"
 
 using namespace wisp;
 using namespace wisp::input;
 
-/* Wisp: config/formatter.zig entryFormatter, the two arms RemapSet uses. */
-struct EntryFormatter {
-    const char *name;
-    std::string *writer;
-
-    void formatEntryVoid() const {
-        writer->append(name);
-        writer->append(" = \n");
-    }
-    void formatEntryString(const std::string &value) const {
-        writer->append(name);
-        writer->append(" = ");
-        writer->append(value);
-        writer->push_back('\n');
-    }
-};
-
-static EntryFormatter entryFormatter(const char *name, std::string *writer) {
-    EntryFormatter f;
-    f.name = name;
-    f.writer = writer;
-    return f;
-}
+using ::wisp::config::formatter::entryFormatter;
 
 static Mods sided(Mod mod, ModSide side) { return RemapSet::initMods(mod, side); }
 
