@@ -38,10 +38,13 @@
 namespace wisp {
 namespace zigstd {
 
-/* std.Io.Reader.Error, of which only one member is reachable here. */
+/* std.Io.Reader.Error. The readers in this file only ever produce
+ * EndOfStream; ReadFailed exists for reader types that model a failing
+ * source, as upstream's tests construct. */
 enum class ReadError : uint8_t {
     none,
     EndOfStream,
+    ReadFailed,
 };
 
 /* std.Io.Reader.fixed: a cursor over bytes already in memory. */

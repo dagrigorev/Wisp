@@ -311,10 +311,10 @@ _Not applicable: Linux GTK application runtime._
 | File | Lines | Status |
 |---|---:|---|
 | `terminal/snapshot/screen.zig` | 2460 | todo |
-| `terminal/snapshot/grid.zig` | 2403 | todo |
+| `terminal/snapshot/grid.zig` | 2403 | done |
 | `terminal/snapshot/snapshot.zig` | 2100 | todo |
 | `terminal/snapshot/terminal.zig` | 1850 | todo |
-| `terminal/snapshot/page.zig` | 1828 | todo |
+| `terminal/snapshot/page.zig` | 1828 | done |
 | `terminal/snapshot/history.zig` | 716 | todo |
 | `terminal/snapshot/record.zig` | 601 | done |
 | `terminal/snapshot/hyperlink.zig` | 493 | done |
