@@ -161,12 +161,55 @@ struct ArenaAllocator {
         size_t used;
     };
 
+    /* std.heap.ArenaAllocator.State: the arena's storage without the child
+     * allocator, so it can be stored compactly and `promote`d back into a
+     * full arena with an allocator on demand. Wisp: added for render.hpp,
+     * which stores one State per render row. */
+    struct State {
+        Chunk *first;
+
+        State() : first(nullptr) {}
+
+        ArenaAllocator promote(Allocator child) const {
+            ArenaAllocator a(child);
+            a.first = first;
+            return a;
+        }
+    };
+
+    /* std.heap.ArenaAllocator.ResetMode. Wisp: only the two modes render.hpp
+     * uses are carried over. */
+    enum class ResetMode { free_all, retain_capacity };
+
     Allocator child_allocator;
     Chunk *first;
 
     static const size_t min_chunk_size = 4096;
 
     explicit ArenaAllocator(Allocator child) : child_allocator(child), first(nullptr) {}
+
+    State state() const {
+        State s;
+        s.first = first;
+        return s;
+    }
+
+    /* std.heap.ArenaAllocator.reset.
+     *
+     * Wisp: upstream's `.retain_capacity` frees every chunk and replaces them
+     * with a single chunk of the summed capacity. This retains the existing
+     * chunks and rewinds each one instead: the same "capacity is kept, all
+     * allocations are invalidated" contract, without the reallocation (which
+     * can fail, whereas upstream's reset reports that through its bool).
+     * Returns true as upstream's does when capacity was retained. */
+    bool reset(ResetMode mode) {
+        switch (mode) {
+        case ResetMode::free_all: deinit(); return true;
+        default:
+            for (Chunk *c = first; c != nullptr; c = c->next) c->used = 0;
+            return true;
+        }
+    }
 
     void deinit() {
         Chunk *c = first;

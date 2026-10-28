@@ -44,6 +44,7 @@ mapping.
 | slice `[]T` | pointer + length pair |
 | `union(enum)` | tag enum + payload fields |
 | `*std.Io.Writer` | `std::string *` — writes cannot fail, so no error path |
+| `*std.Io.Reader` | `zigstd::Reader *` (a cursor over bytes) or `zigstd::LimitedReader *` (reads through a caller-provided buffer). A `decode` is a template over the reader type, which is what upstream gets free by taking the interface pointer. |
 | `log.debug` / `log.warn` etc. | a comment; there is no logging in the port |
 | `defer` / `errdefer` | an RAII guard |
 | `+|` / `-|` saturating ops | the saturating helpers |
@@ -58,7 +59,6 @@ upstream names. Include guards are `WISP_<DIR>_<FILE>_HPP`.
 These upstream features are disabled in Wisp:
 
 ```
-kitty_graphics      = false
 glyph_protocol      = false
 tmux_control_mode   = false
 ```
@@ -66,6 +66,32 @@ tmux_control_mode   = false
 Code and tests behind them are omitted, each with a `Wisp:` note saying which flag
 gated it. Do not port them "for completeness" — they pull in dependencies the port does
 not have.
+
+`kitty_graphics` was disabled until 2026-10-16. The subsystem is now ported and the
+flag is on, so a `Wisp:` note citing it is stale and the gated code it describes should
+be restored rather than left out. Sixel is original work, not a port: upstream has no
+Sixel implementation, so `src/terminal/sixel.hpp` is written to DEC STD 070 and says so.
+
+One consequence worth stating, because it has already caused rework: when a gated
+upstream file is finally ported, **search the tree for it before porting it.** A file
+omitted for a flag may already be in the port, transliterated inside whichever file
+needed it first.
+
+`terminal/kitty/graphics_render.zig` is the worked example, and it cost a broken build.
+Its 27-line `Placement` struct was already transliterated inside
+`graphics_unicode.hpp`, which needed it as a return type, behind a
+`__has_include("graphics_render.hpp")` check that would prefer a sibling port if one
+ever appeared. The ledger said `n/a`, nobody looked, and it was "ported" a second time
+as a new file — in a different namespace to the one the check expected, which flipped
+the guard, dropped the inline copy and broke the build in a translation unit that an
+incremental build did not recompile. The lesson is in two parts: grep first, and when a
+file provides a type another file already declares a fallback for, match the namespace
+the fallback expects.
+
+Separately, when the real file does arrive, check whether anything paraphrased it in the
+meantime. The Direct2D renderer re-derived that same struct by hand as
+`ScreenImagePlacement` while the flag was off. A paraphrase of an upstream type is a
+transliteration debt, not a design choice.
 
 Tests are compiled with `WISP_IS_TEST=1` and `WISP_SLOW_RUNTIME_SAFETY=1`.
 
@@ -141,8 +167,91 @@ When passing a build type to CMake from PowerShell, **quote the whole argument**
 native command literally, variable unexpanded — which is how both CI matrix legs once
 compiled identically and how released binaries shipped unoptimized.
 
+### Golden fixtures
+
+The snapshot subsystem's tests compare encoder output against annotated hex
+references. Upstream `@embedFile`s them at compile time from
+`src/terminal/snapshot/testdata`; this port reads them at runtime, so the copies live
+in `tests/snapshot_testdata` and each test target is given a
+`WISP_SNAPSHOT_TESTDATA` define pointing there — a test run by ctest does not share
+the source tree's working directory.
+
+Copying those files in is deliberate, and consistent with the rule that the upstream
+clone never enters the repo: the prohibition is on the *clone*, not on ported
+artifacts. Upstream test code is already copied in wholesale, and a golden vector is
+the same category of MIT-licensed content. It is also the strongest evidence available
+that the wire format matches — `snapshot_envelope::golden_encoding` passes against
+upstream's own bytes, which no amount of self-consistent round-tripping would prove.
+
+### A reader needs a real buffer
+
+When porting something whose whole purpose is to dodge a Zig standard-library hazard,
+check that the port can still *express* the hazard, or the test guarding it becomes
+decoration.
+
+`snapshot/io.zig` exists because `std.Io.Reader.takeInt` asserts the reader's buffer is
+at least `@sizeOf(T)`, and its one test reads a `u32` through a one-byte buffer to prove
+its own `readInt` does not. Modelled as a bare cursor over a span, that test asserts
+nothing: the failure it describes cannot happen. `zigstd::LimitedReader` therefore
+refills from a caller-provided buffer for real, and the ported test was mutation-checked
+— reintroducing the "whole read must fit the buffer" assumption fails that test and no
+other.
+
+### An incremental build is not evidence
+
+Before claiming a change is clean, build it into a **fresh tree**:
+
+```
+cmake -S . -B build-fresh -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-fresh --target all
+ctest --test-dir build-fresh -C Debug
+```
+
+This is header-only in large part, so a change to one header is only seen by the
+translation units that happen to get recompiled. A green incremental build over a warm
+`build-ci` says nothing about the ones that did not. Twice in one day it said the wrong
+thing: it hid the `C4702` in `zigstd/allocator.hpp`, which was reported and dismissed as
+unreproducible, and it hid a hard compile error in `kitty/graphics_unicode.hpp` that
+failed CI on both matrix legs minutes later. CI always builds cold. Match it before
+pushing.
+
 ## Ledger
 
 `GHOSTTY_PORT_LEDGER.md` is generated by `tools/gen_port_ledger.py`. Only **status**
-cells are edited by hand; they are carried forward when the ledger is regenerated. The
-status cells currently lag reality — several files listed `todo` are ported and tested.
+cells are edited by hand; they are carried forward when the ledger is regenerated.
+
+Because they are carried forward, a wrong cell survives every regeneration until
+somebody checks it against the tree. That is not hypothetical: eight `kitty/graphics_*`
+rows sat at `n/a` — which means *will not be ported* — for as long as the
+`kitty_graphics` flag was off, and stayed there after the subsystem was ported,
+understating the port by 14,310 lines. Check the tree, not the cell.
+
+Prose is **not** carried forward. Regenerating rewrites everything except the status
+cells, so an explanation that belongs in the ledger goes in
+`tools/gen_port_ledger.py`, not in its output.
+
+### Status, in particular `n/a` and `wip`
+
+`n/a` is a decision that a file will never be ported. Use it for a module that does not
+apply to this port at all (a GTK runtime, a Metal backend), for code behind a build flag
+this port disables, and for **Zig-language scaffolding with no C++ analogue**:
+
+- A module aggregator whose body is `pub const X = @import("x.zig")` re-exports. C++
+  headers already serve that role, and a header that re-exported the tree would only
+  create include cycles. `terminal/main.zig` is the example. Check for a substantive
+  declaration hiding among the re-exports before writing it off — `main.zig` has exactly
+  one, `compression_enabled`, and it is `mem.canReclaim(.strict)`, which the port
+  already calls directly at its use sites in `page_list.hpp`.
+- Zig build-script code: `*std.Build`, `addOptions`, `comptime inline for` over a
+  struct's fields. CMake carries that role. `terminal/build_options.zig` is mostly this.
+
+`wip` is for a file that is **part** ported, and it counts toward *remaining*, not
+*ported* — a partially ported file is not ported, and calling it `done` overstates by
+the whole file's length. `terminal/build_options.zig` is `wip` for exactly this reason:
+its `Features` parser is ported and tested, its build-script half never will be.
+
+One `n/a` is conditional and should be revisited rather than trusted:
+`terminal/lib.zig` re-exports `lib/main.zig` and is gated on `build_options.c_abi`. It
+is `n/a` because the port exposes no C ABI today, but it is C ABI scaffolding rather
+than a plain aggregator — **if the open `terminal/c/*` scope question is ever answered
+by porting it, this file comes with it.**

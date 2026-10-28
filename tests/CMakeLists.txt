@@ -102,3 +102,13 @@ add_wisp_test(test_stream_terminal_port test_stream_terminal_port.cpp)
 add_wisp_test(test_formatter_port test_formatter_port.cpp)
 add_wisp_test(test_stream_continuation_port test_stream_continuation_port.cpp)
 add_wisp_test(test_vt_selection_gesture_port test_vt_selection_gesture_port.cpp)
+add_wisp_test(test_render_port test_render_port.cpp)
+add_wisp_test(test_build_options_port test_build_options_port.cpp)
+
+# The snapshot wire format is verified against golden hex fixtures copied
+# from upstream's src/terminal/snapshot/testdata. Upstream @embedFile's
+# them at compile time; this port reads them at runtime, so the test needs
+# to know where they are regardless of the working directory ctest uses.
+add_wisp_test(test_snapshot_envelope_port test_snapshot_envelope_port.cpp)
+target_compile_definitions(test_snapshot_envelope_port PRIVATE
+    "WISP_SNAPSHOT_TESTDATA=\"${CMAKE_CURRENT_SOURCE_DIR}/snapshot_testdata\"")

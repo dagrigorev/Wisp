@@ -13,10 +13,10 @@ License: MIT, (c) 2024 Mitchell Hashimoto and Ghostty contributors
 | | Files | Lines |
 |---|---:|---:|
 | Upstream `src/` (Zig) | 589 | 342401 |
-| Ported | - | 106012 |
-| Not applicable to this port | - | 60628 |
-| Remaining | - | 175761 |
-| ...of which partially ported | - | 0 |
+| Ported | - | 122905 |
+| Not applicable to this port | - | 44558 |
+| Remaining | - | 174938 |
+| ...of which partially ported | - | 812 |
 
 Status values: `todo`, `wip`, `done`, `n/a`. A `wip` file counts
 toward *remaining*, not ported — a partially ported file is not
@@ -25,9 +25,24 @@ whole file's length.
 
 `n/a` covers two cases: a module that does not apply to a Windows
 port at all (a GTK runtime, a Metal backend), and a module behind a
-build flag this port disables — `kitty_graphics`, `glyph_protocol`
-and `tmux_control_mode`. Neither will be ported, so neither counts
+build flag this port disables — `glyph_protocol` and
+`tmux_control_mode`. Neither will be ported, so neither counts
 toward *remaining*.
+
+`kitty_graphics` was in that list until 2026-10-16, when the whole
+subsystem was ported and the flag enabled. Anything still marked
+`n/a` for that reason is a stale cell, not a decision. Statuses are
+carried forward across regenerations, so a wrong one persists until
+somebody checks it against the tree.
+
+`n/a` also covers Zig-language scaffolding with no C++ analogue: a
+module aggregator that only re-exports (`terminal/main.zig`), since
+headers already serve that role, and Zig build-script code, since
+CMake does (`terminal/build_options.zig`, whose parser half is
+ported, leaving it `wip`). One is conditional:
+`terminal/lib.zig` is C ABI scaffolding gated on `c_abi`, so it
+returns to scope if `terminal/c/*` is ever ported. See
+docs/PORTING_CONVENTIONS.md on status.
 
 ## Modules
 
@@ -91,7 +106,7 @@ toward *remaining*.
 | `terminal/stream_terminal.zig` | 6604 | done |
 | `terminal/stream.zig` | 5407 | done |
 | `terminal/page.zig` | 4523 | done |
-| `terminal/render.zig` | 2397 | todo |
+| `terminal/render.zig` | 2397 | done |
 | `terminal/SelectionGesture.zig` | 2110 | done |
 | `terminal/hash_map.zig` | 1918 | done |
 | `terminal/Selection.zig` | 1676 | done |
@@ -107,7 +122,7 @@ toward *remaining*.
 | `terminal/dcs.zig` | 571 | done |
 | `terminal/modes.zig` | 497 | done |
 | `terminal/parse_table.zig` | 448 | done |
-| `terminal/build_options.zig` | 333 | todo |
+| `terminal/build_options.zig` | 333 | wip |
 | `terminal/Tabstops.zig` | 297 | done |
 | `terminal/StringMap.zig` | 296 | done |
 | `terminal/mem.zig` | 260 | done |
@@ -127,13 +142,13 @@ toward *remaining*.
 | `terminal/point.zig` | 112 | done |
 | `terminal/ansi.zig` | 109 | done |
 | `terminal/x11_color.zig` | 107 | done |
-| `terminal/main.zig` | 104 | todo |
+| `terminal/main.zig` | 104 | n/a |
 | `terminal/sys.zig` | 102 | done |
 | `terminal/csi.zig` | 55 | done |
 | `terminal/focus.zig` | 39 | done |
 | `terminal/selection_codepoints.zig` | 31 | done |
 | `terminal/cursor.zig` | 25 | done |
-| `terminal/lib.zig` | 24 | todo |
+| `terminal/lib.zig` | 24 | n/a |
 | `terminal/search.zig` | 23 | done |
 | `terminal/kitty.zig` | 17 | done |
 | `terminal/compress.zig` | 15 | done |
@@ -207,7 +222,7 @@ _Not applicable: Linux GTK application runtime._
 |---|---:|---|
 | `terminal/c/terminal.zig` | 6266 | todo |
 | `terminal/c/render.zig` | 2570 | todo |
-| `terminal/c/kitty_graphics.zig` | 2138 | n/a |
+| `terminal/c/kitty_graphics.zig` | 2138 | todo |
 | `terminal/c/snapshot.zig` | 1527 | todo |
 | `terminal/c/selection_gesture.zig` | 1490 | todo |
 | `terminal/c/types.zig` | 1174 | todo |
@@ -243,28 +258,28 @@ _Not applicable: Linux GTK application runtime._
 
 | File | Lines | Status |
 |---|---:|---|
-| `terminal/kitty/graphics_storage.zig` | 4664 | n/a |
-| `terminal/kitty/graphics_exec.zig` | 3603 | n/a |
-| `terminal/kitty/graphics_image.zig` | 2161 | n/a |
-| `terminal/kitty/graphics_command.zig` | 1872 | n/a |
-| `terminal/kitty/graphics_unicode.zig` | 1349 | n/a |
+| `terminal/kitty/graphics_storage.zig` | 4664 | done |
+| `terminal/kitty/graphics_exec.zig` | 3603 | done |
+| `terminal/kitty/graphics_image.zig` | 2161 | done |
+| `terminal/kitty/graphics_command.zig` | 1872 | done |
+| `terminal/kitty/graphics_unicode.zig` | 1349 | done |
 | `terminal/kitty/dnd_drop.zig` | 715 | done |
 | `terminal/kitty/clipboard_write.zig` | 698 | done |
 | `terminal/kitty/dnd_test.zig` | 626 | done |
 | `terminal/kitty/clipboard_command.zig` | 502 | done |
 | `terminal/kitty/clipboard_response.zig` | 469 | done |
 | `terminal/kitty/dnd_command.zig` | 436 | done |
-| `terminal/kitty/windows.zig` | 277 | todo |
+| `terminal/kitty/windows.zig` | 277 | done |
 | `terminal/kitty/dnd_response.zig` | 248 | done |
 | `terminal/kitty/clipboard_grants.zig` | 238 | done |
-| `terminal/kitty/graphics_pixel.zig` | 235 | n/a |
+| `terminal/kitty/graphics_pixel.zig` | 235 | done |
 | `terminal/kitty/key.zig` | 169 | done |
-| `terminal/kitty/graphics_animation.zig` | 149 | n/a |
+| `terminal/kitty/graphics_animation.zig` | 149 | done |
 | `terminal/kitty/color.zig` | 98 | done |
 | `terminal/kitty/clipboard.zig` | 82 | done |
 | `terminal/kitty/dnd.zig` | 69 | done |
 | `terminal/kitty/graphics.zig` | 36 | n/a |
-| `terminal/kitty/graphics_render.zig` | 27 | n/a |
+| `terminal/kitty/graphics_render.zig` | 27 | done |
 
 ### `config`
 
@@ -301,15 +316,15 @@ _Not applicable: Linux GTK application runtime._
 | `terminal/snapshot/terminal.zig` | 1850 | todo |
 | `terminal/snapshot/page.zig` | 1828 | todo |
 | `terminal/snapshot/history.zig` | 716 | todo |
-| `terminal/snapshot/record.zig` | 601 | todo |
+| `terminal/snapshot/record.zig` | 601 | done |
 | `terminal/snapshot/hyperlink.zig` | 493 | todo |
-| `terminal/snapshot/fixture.zig` | 479 | todo |
+| `terminal/snapshot/fixture.zig` | 479 | wip |
 | `terminal/snapshot/style.zig` | 423 | todo |
 | `terminal/snapshot/continuation.zig` | 320 | todo |
 | `terminal/snapshot/main.zig` | 182 | todo |
 | `terminal/snapshot/checkpoint.zig` | 177 | todo |
-| `terminal/snapshot/envelope.zig` | 104 | todo |
-| `terminal/snapshot/io.zig` | 55 | todo |
+| `terminal/snapshot/envelope.zig` | 104 | done |
+| `terminal/snapshot/io.zig` | 55 | done |
 
 ### `input`
 
@@ -343,7 +358,7 @@ _Not applicable: Linux GTK application runtime._
 | `lib_vt.zig` | 574 | todo |
 | `pty.zig` | 519 | todo |
 | `global.zig` | 446 | todo |
-| `crc32c.zig` | 424 | todo |
+| `crc32c.zig` | 424 | done |
 | `quirks_memset.zig` | 338 | todo |
 | `surface_mouse.zig` | 297 | todo |
 | `tripwire.zig` | 288 | todo |
