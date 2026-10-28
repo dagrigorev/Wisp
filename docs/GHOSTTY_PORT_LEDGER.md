@@ -358,7 +358,7 @@ _Not applicable: Linux GTK application runtime._
 | `lib_vt.zig` | 574 | todo |
 | `pty.zig` | 519 | todo |
 | `global.zig` | 446 | todo |
-| `crc32c.zig` | 424 | todo |
+| `crc32c.zig` | 424 | done |
 | `quirks_memset.zig` | 338 | todo |
 | `surface_mouse.zig` | 297 | todo |
 | `tripwire.zig` | 288 | todo |
