@@ -177,7 +177,18 @@ enum class DecodeError : uint8_t {
     ContinuationLimitExceeded,
     InvalidChecksum,
     PayloadNotExhausted,
+    /* The next record is valid but is not a CONTINUATION. */
+    UnexpectedRecordTag,
 };
+
+inline DecodeError mapFinish(record::Reader::FinishError e) {
+    switch (e) {
+        case record::Reader::FinishError::none: return DecodeError::none;
+        case record::Reader::FinishError::InvalidChecksum: return DecodeError::InvalidChecksum;
+        case record::Reader::FinishError::PayloadNotExhausted: return DecodeError::PayloadNotExhausted;
+    }
+    return DecodeError::none;
+}
 
 /* Decode and validate one CONTINUATION record.
  *
@@ -188,78 +199,52 @@ enum class DecodeError : uint8_t {
  * Wisp: We use std::vector internally; the return value owns the data. */
 template <typename ReaderT>
 inline DecodeError decode(ReaderT *source, Value *out, size_t max_bytes) {
-    record::Reader reader;
+    record::Reader record_reader;
     record::Reader::InitError init_err = record::Reader::InitError::none;
-
-    if (!reader.init(source, &init_err)) {
-        if (init_err == record::Reader::InitError::InvalidTag) {
-            return DecodeError::InvalidTag;
-        }
-        return DecodeError::EndOfStream;
+    if (!record_reader.init(source, &init_err)) {
+        return init_err == record::Reader::InitError::InvalidTag ? DecodeError::InvalidTag
+                                                                 : DecodeError::EndOfStream;
+    }
+    if (record_reader.header.tag != record::Tag::continuation) {
+        return DecodeError::UnexpectedRecordTag;
     }
 
-    if (reader.header.tag != record::Tag::continuation) {
-        return DecodeError::InvalidTag;
-    }
-
-    /* Validate the header payload vs our max size. */
-    size_t len = reader.header.payload_len;
-    if (len > max_bytes) {
-        return DecodeError::ContinuationLimitExceeded;
-    }
+    /* Validate the header payload vs our max size since the header
+     * enforces it. */
+    const size_t len = record_reader.header.payload_len;
+    if (len > max_bytes) return DecodeError::ContinuationLimitExceeded;
 
     if (len == 0) {
         /* Empty is the ground representation, but finish is still required:
          * its CRC covers the tag and zero length even though there is no body. */
-        reader.setPayloadData(nullptr, 0);
-        record::Reader::FinishError ferr = reader.finish();
-        if (ferr != record::Reader::FinishError::none) {
-            if (ferr == record::Reader::FinishError::InvalidChecksum) {
-                return DecodeError::InvalidChecksum;
-            }
-            return DecodeError::PayloadNotExhausted;
-        }
+        const DecodeError ferr = mapFinish(record_reader.finish());
+        if (ferr != DecodeError::none) return ferr;
         *out = Value::makeGround();
         return DecodeError::none;
     }
 
-    /* Read the payload bytes from the source reader. */
-    const uint8_t *payload_data = source->take(len, nullptr);
-    if (payload_data == nullptr) {
+    /* Consume the bytes.
+     * Wisp: the owned buffer is a std::vector, freed on every early return. */
+    std::vector<uint8_t> bytes(len);
+    zigstd::ReadError rerr = zigstd::ReadError::none;
+    if (!record_reader.payloadReader()->readSliceAll(bytes.data(), len, &rerr)) {
         return DecodeError::EndOfStream;
     }
-
-    /* Set the payload data for verification. */
-    reader.setPayloadData(payload_data, len);
-
-    /* Read all payload and verify exact exhaustion and CRC. */
-    const std::string &payload_str = reader.payloadReader()->takeAll();
-    record::Reader::FinishError ferr = reader.finish();
-    if (ferr != record::Reader::FinishError::none) {
-        if (ferr == record::Reader::FinishError::InvalidChecksum) {
-            return DecodeError::InvalidChecksum;
-        }
-        return DecodeError::PayloadNotExhausted;
-    }
+    const DecodeError ferr = mapFinish(record_reader.finish());
+    if (ferr != DecodeError::none) return ferr;
 
     /* Framing is valid, so it is now safe to classify the bytes as replay
      * state. Validation requires a minimal, unfinished, side-effect-free tail. */
-    stream_continuation::ValidateError verr =
-        stream_continuation::validate((const uint8_t *)payload_str.data(), payload_str.size());
-
-    if (verr != stream_continuation::ValidateError::none) {
-        if (verr == stream_continuation::ValidateError::NoPendingState) {
-            return DecodeError::NoPendingState;
-        } else if (verr == stream_continuation::ValidateError::NonCanonicalContinuation) {
+    switch (stream_continuation::validate(bytes.data(), bytes.size())) {
+        case stream_continuation::ValidateError::none: break;
+        case stream_continuation::ValidateError::NoPendingState: return DecodeError::NoPendingState;
+        case stream_continuation::ValidateError::NonCanonicalContinuation:
             return DecodeError::NonCanonicalContinuation;
-        } else if (verr == stream_continuation::ValidateError::ReplayWouldCommit) {
-            return DecodeError::ReplayWouldCommit;
-        }
-        return DecodeError::none;
+        case stream_continuation::ValidateError::ReplayWouldCommit: return DecodeError::ReplayWouldCommit;
     }
 
     /* Ownership transfers to the returned Value only after all validation. */
-    *out = Value::makeBytes((const uint8_t *)payload_str.data(), payload_str.size());
+    *out = Value::makeBytes(bytes.data(), bytes.size());
     return DecodeError::none;
 }
 
