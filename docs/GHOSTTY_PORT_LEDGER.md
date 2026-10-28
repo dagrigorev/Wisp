@@ -312,16 +312,16 @@ _Not applicable: Linux GTK application runtime._
 |---|---:|---|
 | `terminal/snapshot/screen.zig` | 2460 | done |
 | `terminal/snapshot/grid.zig` | 2403 | done |
-| `terminal/snapshot/snapshot.zig` | 2100 | todo |
+| `terminal/snapshot/snapshot.zig` | 2100 | done |
 | `terminal/snapshot/terminal.zig` | 1850 | done |
 | `terminal/snapshot/page.zig` | 1828 | done |
 | `terminal/snapshot/history.zig` | 716 | done |
 | `terminal/snapshot/record.zig` | 601 | done |
 | `terminal/snapshot/hyperlink.zig` | 493 | done |
-| `terminal/snapshot/fixture.zig` | 479 | wip |
+| `terminal/snapshot/fixture.zig` | 479 | done |
 | `terminal/snapshot/style.zig` | 423 | done |
 | `terminal/snapshot/continuation.zig` | 320 | done |
-| `terminal/snapshot/main.zig` | 182 | todo |
+| `terminal/snapshot/main.zig` | 182 | done |
 | `terminal/snapshot/checkpoint.zig` | 177 | done |
 | `terminal/snapshot/envelope.zig` | 104 | done |
 | `terminal/snapshot/io.zig` | 55 | done |

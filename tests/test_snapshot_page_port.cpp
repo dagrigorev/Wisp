@@ -276,7 +276,7 @@ TEST(snapshot_page, framed_PAGE_encode_and_decode_a_sparse_native_page) {
     std::string golden;
     ASSERT_TRUE(loadFixture("page-v1.hex", &golden));
     const std::string path = fixturePath("page-v1.hex");
-    ASSERT_TRUE(fixture::expectEqual(fixture::Kind::bytes, path.c_str(),
+    ASSERT_TRUE(fixture::expectEqual(fixture::Kind::page, path.c_str(),
                                      "snapshot_fixture-page-v1.hex", golden, encoded));
     ASSERT_EQ((long)golden.size(), (long)counter.size());
 
