@@ -320,7 +320,7 @@ _Not applicable: Linux GTK application runtime._
 | `terminal/snapshot/hyperlink.zig` | 493 | todo |
 | `terminal/snapshot/fixture.zig` | 479 | wip |
 | `terminal/snapshot/style.zig` | 423 | todo |
-| `terminal/snapshot/continuation.zig` | 320 | todo |
+| `terminal/snapshot/continuation.zig` | 320 | done |
 | `terminal/snapshot/main.zig` | 182 | todo |
 | `terminal/snapshot/checkpoint.zig` | 177 | done |
 | `terminal/snapshot/envelope.zig` | 104 | done |
