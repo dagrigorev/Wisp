@@ -467,25 +467,25 @@ _Not applicable: Linux GTK application runtime._
 
 | File | Lines | Status |
 |---|---:|---|
-| `terminal/osc/parsers/semantic_prompt.zig` | 1292 | todo |
-| `terminal/osc/parsers/kitty_desktop_notification.zig` | 1201 | todo |
-| `terminal/osc/parsers/osc9.zig` | 1141 | todo |
-| `terminal/osc/parsers/color.zig` | 781 | todo |
-| `terminal/osc/parsers/kitty_clipboard_protocol.zig` | 681 | todo |
-| `terminal/osc/parsers/context_signal.zig` | 541 | todo |
-| `terminal/osc/parsers/iterm2.zig` | 435 | todo |
-| `terminal/osc/parsers/kitty_text_sizing.zig` | 255 | todo |
-| `terminal/osc/parsers/kitty_color.zig` | 212 | todo |
-| `terminal/osc/parsers/hyperlink.zig` | 164 | todo |
-| `terminal/osc/parsers/kitty_dnd_protocol.zig` | 138 | todo |
-| `terminal/osc/parsers/clipboard_operation.zig` | 122 | todo |
-| `terminal/osc/parsers/change_window_title.zig` | 119 | todo |
+| `terminal/osc/parsers/semantic_prompt.zig` | 1292 | done |
+| `terminal/osc/parsers/kitty_desktop_notification.zig` | 1201 | done |
+| `terminal/osc/parsers/osc9.zig` | 1141 | done |
+| `terminal/osc/parsers/color.zig` | 781 | done |
+| `terminal/osc/parsers/kitty_clipboard_protocol.zig` | 681 | done |
+| `terminal/osc/parsers/context_signal.zig` | 541 | done |
+| `terminal/osc/parsers/iterm2.zig` | 435 | done |
+| `terminal/osc/parsers/kitty_text_sizing.zig` | 255 | done |
+| `terminal/osc/parsers/kitty_color.zig` | 212 | done |
+| `terminal/osc/parsers/hyperlink.zig` | 164 | done |
+| `terminal/osc/parsers/kitty_dnd_protocol.zig` | 138 | done |
+| `terminal/osc/parsers/clipboard_operation.zig` | 122 | done |
+| `terminal/osc/parsers/change_window_title.zig` | 119 | done |
 | `terminal/osc/kitty_metadata.zig` | 94 | done |
-| `terminal/osc/parsers/rxvt_extension.zig` | 59 | todo |
-| `terminal/osc/parsers/report_pwd.zig` | 48 | todo |
-| `terminal/osc/parsers/mouse_shape.zig` | 39 | todo |
+| `terminal/osc/parsers/rxvt_extension.zig` | 59 | done |
+| `terminal/osc/parsers/report_pwd.zig` | 48 | done |
+| `terminal/osc/parsers/mouse_shape.zig` | 39 | done |
 | `terminal/osc/encoding.zig` | 38 | done |
-| `terminal/osc/parsers/change_window_icon.zig` | 33 | todo |
+| `terminal/osc/parsers/change_window_icon.zig` | 33 | done |
 | `terminal/osc/parsers.zig` | 23 | done |
 
 ### `termio`
