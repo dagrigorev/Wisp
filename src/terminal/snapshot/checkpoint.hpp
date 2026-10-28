@@ -67,7 +67,8 @@ enum class DecodeError : uint8_t {
     InvalidTag,
     /* The next record is valid but is not the expected marker. */
     UnexpectedRecordTag,
-    /* The record's payload is not empty. */
+    /* record.Reader.FinishError */
+    InvalidChecksum,
     PayloadNotExhausted,
 };
 
@@ -76,32 +77,18 @@ template <typename ReaderT>
 inline DecodeError decode(Kind kind, ReaderT *source) {
     record::Reader record_reader;
     record::Reader::InitError init_err = record::Reader::InitError::none;
-
     if (!record_reader.init(source, &init_err)) {
-        if (init_err == record::Reader::InitError::InvalidTag) {
-            return DecodeError::InvalidTag;
-        } else {
-            return DecodeError::EndOfStream;
-        }
+        return init_err == record::Reader::InitError::InvalidTag ? DecodeError::InvalidTag
+                                                                 : DecodeError::EndOfStream;
     }
-
     if (record_reader.header.tag != kind_to_tag(kind)) {
         return DecodeError::UnexpectedRecordTag;
     }
-
-    if (record_reader.header.payload_len != 0) {
-        return DecodeError::PayloadNotExhausted;
+    switch (record_reader.finish()) {
+        case record::Reader::FinishError::none: return DecodeError::none;
+        case record::Reader::FinishError::InvalidChecksum: return DecodeError::InvalidChecksum;
+        case record::Reader::FinishError::PayloadNotExhausted: return DecodeError::PayloadNotExhausted;
     }
-
-    /* For empty payloads, set payload data to empty and verify finish.
-     * This will validate the CRC and ensure no bytes were consumed. */
-    record_reader.setPayloadData(nullptr, 0);
-
-    record::Reader::FinishError finish_err = record_reader.finish();
-    if (finish_err != record::Reader::FinishError::none) {
-        return DecodeError::PayloadNotExhausted;
-    }
-
     return DecodeError::none;
 }
 

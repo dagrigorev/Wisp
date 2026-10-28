@@ -39,6 +39,7 @@
 #ifndef WISP_TERMINAL_SNAPSHOT_RECORD_HPP
 #define WISP_TERMINAL_SNAPSHOT_RECORD_HPP
 
+#include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -222,11 +223,16 @@ struct Writer {
         return &scratch;
     }
 
-    /* Errors possible during finish. */
+    /* std.Io.Writer.Error || error{PayloadTooLarge}.
+     *
+     * Wisp: WriteFailed is upstream's destination error. A `std::string *`
+     * destination cannot fail, so it is never returned. */
     enum class FinishError : uint8_t {
         none,
-        PayloadTooLarge,
         WriteFailed,
+
+        /* The payload cannot be represented by the record's `u32` length. */
+        PayloadTooLarge,
     };
 
     /* Finish and emit the active record's header followed by its payload.
@@ -234,21 +240,18 @@ struct Writer {
      * Payload validation failures occur before this function and emit no part
      * of the record. A destination failure here may have emitted a prefix. */
     inline FinishError finish() {
-        if (!has_active) {
-            return FinishError::none;
-        }
+        assert(has_active);
+        const Tag tag = active_tag;
 
-        Tag tag = active_tag;
-        has_active = false;
+        /* defer self.cancel() */
+        struct CancelGuard {
+            Writer *w;
+            ~CancelGuard() { w->cancel(); }
+        } guard = { this };
 
         const std::string &payload = scratch;
-
-        /* Check if payload fits in u32. */
-        if (payload.size() > 0xFFFFFFFFU) {
-            return FinishError::PayloadTooLarge;
-        }
-
-        uint32_t payload_len = (uint32_t)payload.size();
+        if ((uint64_t)payload.size() > 0xFFFFFFFFull) return FinishError::PayloadTooLarge;
+        const uint32_t payload_len = (uint32_t)payload.size();
 
         /* The CRC prefix contains the payload length, so checksum the retained
          * payload only after its final length is known. */
@@ -261,19 +264,8 @@ struct Writer {
         header.payload_len = payload_len;
         header.crc32c = checksum.final();
 
-        /* Encode header to a buffer. */
-        std::string header_bytes;
-        header.encode(&header_bytes);
-
-        /* Write to destination. */
-        if (header_bytes.size() != Header::len) {
-            return FinishError::WriteFailed;
-        }
-
-        destination->append(header_bytes);
+        header.encode(destination);
         destination->append(payload);
-
-        scratch.clear();
         return FinishError::none;
     }
 
@@ -287,66 +279,88 @@ struct Writer {
     }
 };
 
-/* A simple payload reader that tracks boundaries and crc. */
+/* The length-limited, checksum-updating payload reader returned by
+ * `Reader.payloadReader`.
+ *
+ * Wisp: upstream composes `std.Io.Reader.Limited` and
+ * `std.Io.Reader.Hashed(Crc32c)` over the source. This is that composition
+ * as one type: every byte read through it, discarded through it, or
+ * attempted past its limit is drawn from the source, counted against
+ * `payload_len`, and hashed. A read that asks for more than remains
+ * consumes and hashes what remains and then reports EndOfStream, exactly
+ * as the Limited adapter does, so the source is never advanced into the
+ * following record.
+ *
+ * The source is type-erased behind a read thunk so one Reader type serves
+ * every source reader shape, as upstream's interface pointer does. */
 struct PayloadReader {
-    const uint8_t *data;
-    size_t remaining;
-    Checksum *checksum;
+    void *source = nullptr;
+    bool (*source_read)(void *source, void *dest, size_t n, zigstd::ReadError *err) = nullptr;
+    size_t limit_remaining = 0;
+    Checksum checksum;
 
-    static PayloadReader make(const uint8_t *payload_data, size_t payload_len,
-                               Checksum *crc) {
-        PayloadReader r;
-        r.data = payload_data;
-        r.remaining = payload_len;
-        r.checksum = crc;
-        return r;
-    }
+    /* Wisp: backing storage for `take`, whose upstream slice points into the
+     * reader's own buffer. Valid until the next `take`. */
+    std::string take_buf;
 
-    /* Read all remaining bytes. Simplified for testing. */
-    const std::string &takeAll() {
-        static std::string result;
-        result.clear();
-        if (data && remaining > 0) {
-            result.append((const char *)data, remaining);
-            if (checksum) {
-                checksum->update(data, remaining);
+    /* std.Io.Reader.readSliceAll through the limit and the hasher. */
+    bool readSliceAll(void *dest, size_t n, zigstd::ReadError *err) {
+        const size_t take_n = n < limit_remaining ? n : limit_remaining;
+        if (take_n > 0) {
+            if (!source_read(source, dest, take_n, err)) {
+                limit_remaining = 0;
+                if (err != nullptr) *err = zigstd::ReadError::EndOfStream;
+                return false;
             }
-            remaining = 0;
+            checksum.update((const uint8_t *)dest, take_n);
+            limit_remaining -= take_n;
         }
-        return result;
+        if (take_n < n) {
+            if (err != nullptr) *err = zigstd::ReadError::EndOfStream;
+            return false;
+        }
+        return true;
     }
 
-    /* Take n bytes and update checksum. */
-    const uint8_t *take(size_t n) {
-        if (remaining < n) return nullptr;
-        const uint8_t *result = data;
-        if (checksum) {
-            checksum->update(data, n);
-        }
-        data += n;
-        remaining -= n;
-        return result;
+    /* std.Io.Reader.takeByte */
+    bool takeByte(uint8_t *out, zigstd::ReadError *err) {
+        return readSliceAll(out, 1, err);
     }
 
-    /* Get remaining count. */
-    size_t remainingLen() const { return remaining; }
+    /* std.Io.Reader.take */
+    const uint8_t *take(size_t n, zigstd::ReadError *err) {
+        take_buf.resize(n);
+        if (!readSliceAll(n ? &take_buf[0] : nullptr, n, err)) return nullptr;
+        return (const uint8_t *)take_buf.data();
+    }
+
+    /* std.Io.Reader.discardAll; discarded bytes still pass the hasher. */
+    bool discardAll(size_t n, zigstd::ReadError *err) {
+        uint8_t scratch[256];
+        while (n > 0) {
+            const size_t step = n < sizeof scratch ? n : sizeof scratch;
+            if (!readSliceAll(scratch, step, err)) return false;
+            n -= step;
+        }
+        return true;
+    }
+
+    /* Payload bytes not yet consumed. */
+    size_t remaining() const { return limit_remaining; }
 };
 
 /* Reads one complete record.
  *
- * `init` decodes the header, provides payload reading through embedded
- * structures, and `finish` verifies exact exhaustion and the CRC32C. */
+ * `init` decodes the header, `payloadReader` returns a reader limited to the
+ * declared payload, and `finish` verifies exact exhaustion and the CRC32C.
+ *
+ * Wisp: upstream additionally borrows the payload in place when the source
+ * already has it fully buffered, verifying the CRC in one pass in `finish`.
+ * That is a performance path over the same contract; the port's readers do
+ * not expose their buffer, so every record streams. */
 struct Reader {
     Header header;
-    PayloadReader payload_reader;
-    Checksum checksum;
-    bool has_checksum = false;
-
-    enum class FinishError : uint8_t {
-        none,
-        InvalidChecksum,
-        PayloadNotExhausted,
-    };
+    PayloadReader payload;
 
     enum class InitError : uint8_t {
         none,
@@ -354,56 +368,50 @@ struct Reader {
         InvalidTag,
     };
 
-    /* Decode a record header and initialize for payload reading.
+    /* Errors detected after a payload decoder returns. */
+    enum class FinishError : uint8_t {
+        none,
+
+        /* The payload bytes do not match the CRC in the record header. */
+        InvalidChecksum,
+
+        /* The decoder did not consume exactly `payload_len` bytes. */
+        PayloadNotExhausted,
+    };
+
+    template <typename SourceT>
+    static bool readThunk(void *source, void *dest, size_t n, zigstd::ReadError *err) {
+        return ((SourceT *)source)->readSliceAll(dest, n, err);
+    }
+
+    /* Decode a record header and initialize its payload reader.
      *
-     * For simple fixed-buffer testing, caller provides the full record bytes. */
-    template <typename ReaderT>
-    inline bool init(ReaderT *source, InitError *err) {
-        /* Decode header. */
+     * `source` must outlive this reader. Decode the payload only through the
+     * reader returned by `payloadReader`. */
+    template <typename SourceT>
+    bool init(SourceT *source, InitError *err) {
         DecodeError decode_err = DecodeError::none;
         if (!Header::decode(source, &header, &decode_err)) {
-            if (err != nullptr) {
-                if (decode_err == DecodeError::InvalidTag) {
-                    *err = InitError::InvalidTag;
-                } else {
-                    *err = InitError::EndOfStream;
-                }
-            }
+            *err = decode_err == DecodeError::InvalidTag ? InitError::InvalidTag
+                                                         : InitError::EndOfStream;
             return false;
         }
 
-        /* Initialize checksum for payload verification. */
-        checksum.init(header.tag, header.payload_len);
-        has_checksum = true;
-
-        if (err != nullptr) *err = InitError::none;
+        payload.source = (void *)source;
+        payload.source_read = &readThunk<SourceT>;
+        payload.limit_remaining = header.payload_len;
+        payload.checksum.init(header.tag, header.payload_len);
+        *err = InitError::none;
         return true;
     }
 
-    /* Get the payload reader for this record. Must be called after init. */
-    inline PayloadReader *payloadReader() {
-        return &payload_reader;
-    }
-
-    /* Set the payload data (called by the test after decoding from reader). */
-    inline void setPayloadData(const uint8_t *data, size_t len) {
-        payload_reader = PayloadReader::make(data, len, &checksum);
-    }
+    /* Return the length-limited, checksum-updating payload reader. */
+    PayloadReader *payloadReader() { return &payload; }
 
     /* Require exact payload exhaustion and validate its CRC32C. */
-    inline FinishError finish() {
-        if (payload_reader.remainingLen() != 0) {
-            return FinishError::PayloadNotExhausted;
-        }
-
-        if (!has_checksum) {
-            return FinishError::none;
-        }
-
-        if (checksum.final() != header.crc32c) {
-            return FinishError::InvalidChecksum;
-        }
-
+    FinishError finish() {
+        if (payload.limit_remaining != 0) return FinishError::PayloadNotExhausted;
+        if (payload.checksum.final() != header.crc32c) return FinishError::InvalidChecksum;
         return FinishError::none;
     }
 };
