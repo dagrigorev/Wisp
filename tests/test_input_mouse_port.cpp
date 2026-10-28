@@ -16,6 +16,8 @@
 #include "test_helpers.h"
 #include "../src/input/mouse.hpp"
 #include "../src/input/mouse_encode.hpp"
+/* Wisp: KeymapNoop.zig has no tests; including it here compiles it. */
+#include "../src/input/keymap_noop.hpp"
 
 using namespace wisp;
 using namespace wisp::input;

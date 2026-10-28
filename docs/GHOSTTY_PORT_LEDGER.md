@@ -345,7 +345,7 @@ _Not applicable: Linux GTK application runtime._
 | `input/mouse.zig` | 110 | done |
 | `input/Link.zig` | 79 | todo |
 | `input/keyboard.zig` | 58 | done |
-| `input/KeymapNoop.zig` | 39 | todo |
+| `input/KeymapNoop.zig` | 39 | done |
 | `input/config.zig` | 8 | done |
 
 ### `src`
