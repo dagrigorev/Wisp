@@ -330,7 +330,7 @@ _Not applicable: Linux GTK application runtime._
 
 | File | Lines | Status |
 |---|---:|---|
-| `input/Binding.zig` | 4921 | todo |
+| `input/Binding.zig` | 4921 | done |
 | `input/key_encode.zig` | 2844 | done |
 | `input/key_mods.zig` | 913 | done |
 | `input/key.zig` | 876 | done |
