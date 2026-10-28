@@ -337,7 +337,7 @@ _Not applicable: Linux GTK application runtime._
 | `input/mouse_encode.zig` | 781 | todo |
 | `input/command.zig` | 768 | todo |
 | `input/keycodes.zig` | 673 | todo |
-| `input/paste.zig` | 392 | todo |
+| `input/paste.zig` | 392 | done |
 | `input/function_keys.zig` | 333 | todo |
 | `input/KeymapDarwin.zig` | 289 | todo |
 | `input/kitty.zig` | 134 | todo |
@@ -361,7 +361,7 @@ _Not applicable: Linux GTK application runtime._
 | `crc32c.zig` | 424 | done |
 | `quirks_memset.zig` | 338 | todo |
 | `surface_mouse.zig` | 297 | todo |
-| `tripwire.zig` | 288 | todo |
+| `tripwire.zig` | 288 | done |
 | `main_ghostty.zig` | 266 | todo |
 | `main_c.zig` | 265 | todo |
 | `helpgen.zig` | 188 | todo |
@@ -587,12 +587,12 @@ _Not applicable: Zig build system plumbing._
 |---|---:|---|
 | `datastruct/split_tree.zig` | 2529 | todo |
 | `datastruct/circ_buf.zig` | 921 | todo |
-| `datastruct/segmented_list.zig` | 533 | todo |
+| `datastruct/segmented_list.zig` | 533 | done |
 | `datastruct/comparison.zig` | 432 | todo |
-| `datastruct/untouched_pool.zig` | 297 | todo |
+| `datastruct/untouched_pool.zig` | 297 | done |
 | `datastruct/blocking_queue.zig` | 261 | todo |
 | `datastruct/cache_table.zig` | 181 | todo |
-| `datastruct/intrusive_linked_list.zig` | 181 | todo |
+| `datastruct/intrusive_linked_list.zig` | 181 | done |
 | `datastruct/wasm_page_pool.zig` | 162 | todo |
 | `datastruct/limited_allocator.zig` | 124 | todo |
 | `datastruct/message_data.zig` | 124 | todo |
@@ -618,7 +618,7 @@ _Not applicable: Zig build system plumbing._
 |---|---:|---|
 | `os/flatpak.zig` | 521 | todo |
 | `os/windows.zig` | 378 | todo |
-| `os/string_encoding.zig` | 307 | todo |
+| `os/string_encoding.zig` | 307 | done |
 | `os/xdg.zig` | 269 | todo |
 | `os/locale.zig` | 232 | todo |
 | `os/i18n.zig` | 210 | todo |
@@ -792,8 +792,8 @@ _Not applicable: Apple Metal backend._
 
 | File | Lines | Status |
 |---|---:|---|
-| `simd/vt.zig` | 574 | todo |
-| `simd/base64.zig` | 442 | todo |
+| `simd/vt.zig` | 574 | done |
+| `simd/base64.zig` | 442 | done |
 | `simd/base64_scalar.zig` | 153 | todo |
 | `simd/codepoint_width.zig` | 52 | todo |
 | `simd/index_of.zig` | 35 | todo |
@@ -847,7 +847,7 @@ _Not applicable: benchmark data generation._
 | `unicode/lut.zig` | 188 | todo |
 | `unicode/props_uucode.zig` | 83 | todo |
 | `unicode/symbols_uucode.zig` | 66 | todo |
-| `unicode/main.zig` | 63 | todo |
+| `unicode/main.zig` | 63 | done |
 | `unicode/props.zig` | 63 | todo |
 | `unicode/props_table.zig` | 18 | todo |
 | `unicode/symbols_table.zig` | 17 | todo |
