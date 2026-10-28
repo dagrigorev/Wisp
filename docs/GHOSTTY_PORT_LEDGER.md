@@ -334,7 +334,7 @@ _Not applicable: Linux GTK application runtime._
 | `input/key_encode.zig` | 2844 | done |
 | `input/key_mods.zig` | 913 | done |
 | `input/key.zig` | 876 | done |
-| `input/mouse_encode.zig` | 781 | todo |
+| `input/mouse_encode.zig` | 781 | done |
 | `input/command.zig` | 768 | todo |
 | `input/keycodes.zig` | 673 | done |
 | `input/paste.zig` | 392 | done |
@@ -342,10 +342,10 @@ _Not applicable: Linux GTK application runtime._
 | `input/KeymapDarwin.zig` | 289 | todo |
 | `input/kitty.zig` | 134 | done |
 | `input/helpgen_actions.zig` | 112 | todo |
-| `input/mouse.zig` | 110 | todo |
+| `input/mouse.zig` | 110 | done |
 | `input/Link.zig` | 79 | todo |
-| `input/keyboard.zig` | 58 | todo |
-| `input/KeymapNoop.zig` | 39 | todo |
+| `input/keyboard.zig` | 58 | done |
+| `input/KeymapNoop.zig` | 39 | done |
 | `input/config.zig` | 8 | done |
 
 ### `src`
@@ -418,7 +418,7 @@ _Not applicable: Linux GTK application runtime._
 | `renderer/Thread.zig` | 855 | todo |
 | `renderer/cell.zig` | 706 | todo |
 | `renderer/Metal.zig` | 491 | todo |
-| `renderer/size.zig` | 458 | todo |
+| `renderer/size.zig` | 458 | done |
 | `renderer/OpenGL.zig` | 457 | todo |
 | `renderer/shadertoy.zig` | 429 | todo |
 | `renderer/Overlay.zig` | 416 | todo |
