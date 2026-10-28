@@ -313,7 +313,7 @@ _Not applicable: Linux GTK application runtime._
 | `terminal/snapshot/screen.zig` | 2460 | done |
 | `terminal/snapshot/grid.zig` | 2403 | done |
 | `terminal/snapshot/snapshot.zig` | 2100 | todo |
-| `terminal/snapshot/terminal.zig` | 1850 | todo |
+| `terminal/snapshot/terminal.zig` | 1850 | done |
 | `terminal/snapshot/page.zig` | 1828 | done |
 | `terminal/snapshot/history.zig` | 716 | done |
 | `terminal/snapshot/record.zig` | 601 | done |
