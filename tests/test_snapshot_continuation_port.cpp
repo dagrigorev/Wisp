@@ -275,23 +275,11 @@ TEST(snapshot_continuation, rejects_truncation_checksum_and_tag) {
         ASSERT_EQ(err, continuation::DecodeError::InvalidChecksum);
     }
 
-    /* Test wrong tag: use ground fixture's bytes but expect continuation tag. */
-    std::string wrong_tag_bytes = test_ground_fixture;
-    /* The tag is stored in little-endian u16 at offset 0.
-     * Change it from continuation (7) to ready (5). */
-    if (wrong_tag_bytes.size() >= 2) {
-        uint16_t new_tag = 5;  /* ready tag */
-        wrong_tag_bytes[0] = (char)(new_tag & 0xFF);
-        wrong_tag_bytes[1] = (char)((new_tag >> 8) & 0xFF);
-
-        /* Need to recalculate the CRC for this to be a valid record. */
-        /* For this test, we'll just verify the tag check happens first. */
-        Reader wrong_tag_source = Reader::fixed(wrong_tag_bytes.data(),
-                                                wrong_tag_bytes.size());
-        continuation::Value dummy;
-        continuation::DecodeError err = continuation::decode(&wrong_tag_source, &dummy, 1024);
-        /* We expect InvalidTag or InvalidChecksum. */
-        ASSERT(err == continuation::DecodeError::InvalidTag ||
-               err == continuation::DecodeError::InvalidChecksum);
-    }
+    std::string wrong_tag = test_ground_fixture;
+    wrong_tag[0] = (char)(uint8_t)record::Tag::ready;
+    wrong_tag[1] = 0;
+    Reader tag_source = Reader::fixed(wrong_tag.data(), wrong_tag.size());
+    continuation::Value dummy;
+    ASSERT_TRUE(continuation::decode(&tag_source, &dummy, 1024) ==
+                continuation::DecodeError::UnexpectedRecordTag);
 }
