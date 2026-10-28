@@ -21,7 +21,7 @@
 #include "test_helpers.h"
 #include "snapshot_fixture.hpp"
 #include "../src/terminal/kitty/graphics_unicode.hpp"
-#include "../src/terminal/snapshot/snapshot.hpp"
+#include "../src/terminal/snapshot/main.hpp"
 #include "../src/terminal/stream_terminal.hpp"
 #include "../src/vt/formatter.hpp"
 #include "../src/zigstd/allocator.hpp"

@@ -321,7 +321,7 @@ _Not applicable: Linux GTK application runtime._
 | `terminal/snapshot/fixture.zig` | 479 | wip |
 | `terminal/snapshot/style.zig` | 423 | done |
 | `terminal/snapshot/continuation.zig` | 320 | done |
-| `terminal/snapshot/main.zig` | 182 | todo |
+| `terminal/snapshot/main.zig` | 182 | done |
 | `terminal/snapshot/checkpoint.zig` | 177 | done |
 | `terminal/snapshot/envelope.zig` | 104 | done |
 | `terminal/snapshot/io.zig` | 55 | done |
