@@ -335,7 +335,7 @@ _Not applicable: Linux GTK application runtime._
 | `input/key_mods.zig` | 913 | done |
 | `input/key.zig` | 876 | done |
 | `input/mouse_encode.zig` | 781 | done |
-| `input/command.zig` | 768 | todo |
+| `input/command.zig` | 768 | done |
 | `input/keycodes.zig` | 673 | done |
 | `input/paste.zig` | 392 | done |
 | `input/function_keys.zig` | 333 | done |
