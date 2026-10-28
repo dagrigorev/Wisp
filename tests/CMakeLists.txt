@@ -149,3 +149,4 @@ target_compile_definitions(test_snapshot_snapshot_port PRIVATE
 add_wisp_test(test_input_key_port test_input_key_port.cpp)
 add_wisp_test(test_input_tables_port test_input_tables_port.cpp)
 add_wisp_test(test_input_key_encode_port test_input_key_encode_port.cpp)
+add_wisp_test(test_datastruct_comparison_port test_datastruct_comparison_port.cpp)
