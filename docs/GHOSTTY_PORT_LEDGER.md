@@ -331,16 +331,16 @@ _Not applicable: Linux GTK application runtime._
 | File | Lines | Status |
 |---|---:|---|
 | `input/Binding.zig` | 4921 | todo |
-| `input/key_encode.zig` | 2844 | todo |
+| `input/key_encode.zig` | 2844 | done |
 | `input/key_mods.zig` | 913 | done |
 | `input/key.zig` | 876 | done |
 | `input/mouse_encode.zig` | 781 | todo |
 | `input/command.zig` | 768 | todo |
-| `input/keycodes.zig` | 673 | todo |
+| `input/keycodes.zig` | 673 | done |
 | `input/paste.zig` | 392 | done |
-| `input/function_keys.zig` | 333 | todo |
+| `input/function_keys.zig` | 333 | done |
 | `input/KeymapDarwin.zig` | 289 | todo |
-| `input/kitty.zig` | 134 | todo |
+| `input/kitty.zig` | 134 | done |
 | `input/helpgen_actions.zig` | 112 | todo |
 | `input/mouse.zig` | 110 | todo |
 | `input/Link.zig` | 79 | todo |

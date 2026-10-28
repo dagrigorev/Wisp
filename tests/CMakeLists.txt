@@ -147,3 +147,5 @@ add_wisp_test(test_snapshot_snapshot_port test_snapshot_snapshot_port.cpp)
 target_compile_definitions(test_snapshot_snapshot_port PRIVATE
     "WISP_SNAPSHOT_TESTDATA=\"${CMAKE_CURRENT_SOURCE_DIR}/snapshot_testdata\"")
 add_wisp_test(test_input_key_port test_input_key_port.cpp)
+add_wisp_test(test_input_tables_port test_input_tables_port.cpp)
+add_wisp_test(test_input_key_encode_port test_input_key_encode_port.cpp)
