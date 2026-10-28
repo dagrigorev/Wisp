@@ -50,7 +50,10 @@
 namespace wisp {
 namespace test_fixture {
 
-enum class Kind { bytes };
+/* Wisp: `page` and `snapshot` select upstream's structure-aware candidate
+ * formatting, which is not ported (see the header); they compare bytes
+ * exactly like `bytes`. */
+enum class Kind { bytes, page, snapshot };
 
 /* Decode an annotated hexadecimal fixture.
  *
