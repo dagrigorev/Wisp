@@ -153,3 +153,5 @@ add_wisp_test(test_datastruct_comparison_port test_datastruct_comparison_port.cp
 add_wisp_test(test_config_formatter_port test_config_formatter_port.cpp)
 add_wisp_test(test_renderer_size_port test_renderer_size_port.cpp)
 add_wisp_test(test_input_mouse_port test_input_mouse_port.cpp)
+add_wisp_test(test_input_binding_port test_input_binding_port.cpp)
+add_wisp_test(test_input_command_port test_input_command_port.cpp)
